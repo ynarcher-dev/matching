@@ -10,7 +10,11 @@ import { NotFoundView } from '@/views/NotFoundView';
 import { PlaceholderView } from '@/views/common/PlaceholderView';
 import { EventListView } from '@/views/admin/EventListView';
 import { EventDetailView } from '@/views/admin/EventDetailView';
+import { AiAllocationView } from '@/views/admin/AiAllocationView';
 import { UserListView } from '@/views/admin/UserListView';
+import { StartupPortalView } from '@/views/startup/StartupPortalView';
+import { ExpertDashboardView } from '@/views/expert/ExpertDashboardView';
+import { ExpertHistoryView } from '@/views/expert/ExpertHistoryView';
 
 /**
  * 라우트 정의 (page_auth_layout.md §1.3 역할별 진입 + §2.4 메뉴).
@@ -31,12 +35,7 @@ export function AppRoutes() {
             <Route path="/admin/events/:eventId" element={<EventDetailView />} />
             <Route
               path="/admin/events/:eventId/ai-allocation"
-              element={
-                <PlaceholderView
-                  title="AI 자동배치"
-                  description="슬롯 자동 생성·AI 매칭 제안·확정 — 다음 슬라이스에서 구현."
-                />
-              }
+              element={<AiAllocationView />}
             />
             <Route path="/admin/users" element={<UserListView />} />
             <Route
@@ -55,22 +54,13 @@ export function AppRoutes() {
 
           {/* 전문가 */}
           <Route element={<RequireRole allow={['EXPERT']} />}>
-            <Route
-              path="/expert/dashboard"
-              element={<PlaceholderView title="오늘의 스케줄" description="본인 상담 시간표 및 진행." />}
-            />
-            <Route
-              path="/expert/history"
-              element={<PlaceholderView title="이전 상담 이력" description="과거 상담일지 조회." />}
-            />
+            <Route path="/expert/dashboard" element={<ExpertDashboardView />} />
+            <Route path="/expert/history" element={<ExpertHistoryView />} />
           </Route>
 
           {/* 스타트업 */}
           <Route element={<RequireRole allow={['STARTUP']} />}>
-            <Route
-              path="/startup/booking"
-              element={<PlaceholderView title="내 예약 관리" description="전문가 조회 및 예약/변경/취소." />}
-            />
+            <Route path="/startup/booking" element={<StartupPortalView />} />
             <Route
               path="/startup/notices"
               element={<PlaceholderView title="안내 사항" description="행사 안내 및 공지." />}

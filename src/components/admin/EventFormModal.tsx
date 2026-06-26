@@ -28,6 +28,7 @@ function buildDefaults(event?: EventWithCounts | null): EventFormValues {
       max_sessions_per_startup: 3,
       timezone: DEFAULT_TZ,
       allow_startup_self_booking: false,
+      allow_duplicate_expert: false,
       booking_start: '',
       booking_end: '',
       event_start: '',
@@ -40,6 +41,7 @@ function buildDefaults(event?: EventWithCounts | null): EventFormValues {
     max_sessions_per_startup: event.max_sessions_per_startup,
     timezone: tz,
     allow_startup_self_booking: event.allow_startup_self_booking,
+    allow_duplicate_expert: event.allow_duplicate_expert,
     booking_start: isoToLocalInput(event.booking_start, tz),
     booking_end: isoToLocalInput(event.booking_end, tz),
     event_start: isoToLocalInput(event.event_start, tz),
@@ -163,6 +165,15 @@ export function EventFormModal({ open, onClose, event }: EventFormModalProps) {
             {...register('allow_startup_self_booking')}
           />
           배치 조율·진행 단계에서도 스타트업 자율 예약(변경·취소) 허용
+        </label>
+
+        <label className="flex items-center gap-2 text-sm font-medium text-neutral-base">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
+            {...register('allow_duplicate_expert')}
+          />
+          동일 전문가와 2회 이상(연속 시간 등) 예약 허용
         </label>
       </form>
     </Modal>

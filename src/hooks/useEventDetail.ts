@@ -11,7 +11,8 @@ import type {
 /** 상세 화면에서 쓰는 events 컬럼(목록과 동일 + 상태 고정 메타). */
 const EVENT_DETAIL_COLUMNS =
   'id,title,status,status_override,status_override_reason,booking_start,booking_end,' +
-  'event_start,event_end,max_sessions_per_startup,allow_startup_self_booking,timezone,created_at';
+  'event_start,event_end,max_sessions_per_startup,allow_startup_self_booking,' +
+  'allow_duplicate_expert,timezone,created_at';
 
 export const eventDetailKeys = {
   root: (eventId: string) => ['event-detail', eventId] as const,
@@ -72,10 +73,14 @@ export function useEventTables(eventId: string) {
   });
 }
 
-/** 행사 매칭 슬롯 목록(시간순). 강제 조정·예약 현황 통계의 원천. */
-export function useEventSlots(eventId: string) {
+/**
+ * 행사 매칭 슬롯 목록(시간순). 강제 조정·예약 현황 통계·진행 타임그리드의 원천.
+ * @param opts.refetchInterval 진행 단계 실시간 폴링용(ms). 미지정 시 폴링하지 않는다.
+ */
+export function useEventSlots(eventId: string, opts?: { refetchInterval?: number }) {
   return useQuery<MatchingSlotRow[]>({
     queryKey: eventDetailKeys.slots(eventId),
+    refetchInterval: opts?.refetchInterval ?? false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('matching_slots')

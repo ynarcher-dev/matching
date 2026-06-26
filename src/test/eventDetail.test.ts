@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { eventTableSchema, forceReasonSchema } from '@/schemas/eventDetailSchemas';
 import {
+  buildBookingSchedule,
   computeBookingStats,
   conflictingStartupIds,
   overlaps,
@@ -173,5 +174,32 @@ describe('라벨 매핑 완전성', () => {
     expect(Object.keys(SESSION_STATUS_LABELS)).toHaveLength(5);
     expect(BOOKING_TYPE_LABELS.ADMIN_FORCE).toBe('강제');
     expect(SESSION_STATUS_LABELS.IN_PROGRESS).toBe('진행중');
+  });
+});
+
+describe('buildBookingSchedule', () => {
+  it('열=시작시각 오름차순(중복 제거), 행=전문가별 셀 매핑', () => {
+    const t1 = '2026-07-10T01:00:00.000Z';
+    const t2 = '2026-07-10T01:40:00.000Z';
+    const slots = [
+      slot({ id: 'a', expert_id: 'X1', start_time: t2, startup_id: 'S1', booking_type: 'MANUAL' }),
+      slot({ id: 'b', expert_id: 'X1', start_time: t1 }),
+      slot({ id: 'c', expert_id: 'X2', start_time: t1, startup_id: 'S2', booking_type: 'AUTO_AI' }),
+    ];
+    const { columns, byExpert } = buildBookingSchedule(slots);
+    expect(columns).toEqual([t1, t2]);
+    expect(byExpert.get('X1')?.get(t1)?.id).toBe('b');
+    expect(byExpert.get('X1')?.get(t2)?.startup_id).toBe('S1');
+    expect(byExpert.get('X2')?.get(t1)?.id).toBe('c');
+    expect(byExpert.get('X2')?.get(t2)).toBeUndefined();
+  });
+
+  it('취소된 슬롯은 열·셀에서 제외한다', () => {
+    const t1 = '2026-07-10T01:00:00.000Z';
+    const { columns, byExpert } = buildBookingSchedule([
+      slot({ id: 'a', expert_id: 'X1', start_time: t1, session_status: 'CANCELLED' }),
+    ]);
+    expect(columns).toEqual([]);
+    expect(byExpert.size).toBe(0);
   });
 });

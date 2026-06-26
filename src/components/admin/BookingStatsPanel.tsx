@@ -2,9 +2,15 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
+import { BookingScheduleTable } from '@/components/admin/BookingScheduleTable';
 import { computeBookingStats, unbookedStartupIds } from '@/lib/booking';
 import { participantLabel } from '@/lib/labels';
-import type { AssignableUser, EventParticipantRow, MatchingSlotRow } from '@/types/eventDetail';
+import type {
+  AssignableUser,
+  EventParticipantRow,
+  EventTable,
+  MatchingSlotRow,
+} from '@/types/eventDetail';
 
 /** 5% 단위 정적 width 클래스(인라인 스타일 금지 대응 — Tailwind JIT 가 리터럴을 수집). */
 const BAR_WIDTH_CLASS: Record<number, string> = {
@@ -35,7 +41,9 @@ interface BookingStatsPanelProps {
   eventId: string;
   slots: MatchingSlotRow[];
   participants: EventParticipantRow[];
+  tables: EventTable[];
   userById: Map<string, AssignableUser>;
+  timezone: string;
 }
 
 /**
@@ -46,7 +54,9 @@ export function BookingStatsPanel({
   eventId,
   slots,
   participants,
+  tables,
   userById,
+  timezone,
 }: BookingStatsPanelProps) {
   const startupIds = useMemo(
     () => participants.filter((p) => p.participant_type === 'STARTUP').map((p) => p.user_id),
@@ -100,6 +110,14 @@ export function BookingStatsPanel({
           </>
         )}
       </Card>
+
+      <BookingScheduleTable
+        slots={slots}
+        participants={participants}
+        tables={tables}
+        userById={userById}
+        timezone={timezone}
+      />
 
       <Card className="flex flex-col gap-3 p-5">
         <h3 className="text-base font-bold text-neutral-base">미예약 스타트업</h3>

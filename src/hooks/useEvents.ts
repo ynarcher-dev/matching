@@ -5,7 +5,8 @@ import type { EventRow, EventWithCounts } from '@/types/event';
 /** events 행 + 카드 통계에서 쓰는 컬럼(민감 컬럼 제외). */
 const EVENT_COLUMNS =
   'id,title,status,status_override,status_override_reason,booking_start,booking_end,' +
-  'event_start,event_end,max_sessions_per_startup,allow_startup_self_booking,timezone,created_at';
+  'event_start,event_end,max_sessions_per_startup,allow_startup_self_booking,' +
+  'allow_duplicate_expert,timezone,created_at';
 
 export const eventKeys = {
   all: ['events'] as const,

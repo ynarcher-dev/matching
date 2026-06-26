@@ -66,6 +66,31 @@ export function unbookedStartupIds(
 }
 
 /**
+ * 예약 배치 현황 매트릭스 (page_admin_event_detail.md §2.2 보강 — 전문가×시간 표).
+ * 취소되지 않은 슬롯을 열=시작시각, 행=전문가로 묶어 셀에서 슬롯을 찾을 수 있게 한다.
+ * @returns columns 시작시각(ISO) 오름차순, byExpert expert_id→(startIso→slot)
+ */
+export function buildBookingSchedule(slots: MatchingSlotRow[]): {
+  columns: string[];
+  byExpert: Map<string, Map<string, MatchingSlotRow>>;
+} {
+  const colSet = new Set<string>();
+  const byExpert = new Map<string, Map<string, MatchingSlotRow>>();
+  for (const s of slots) {
+    if (s.session_status === 'CANCELLED') continue;
+    colSet.add(s.start_time);
+    let row = byExpert.get(s.expert_id);
+    if (!row) {
+      row = new Map<string, MatchingSlotRow>();
+      byExpert.set(s.expert_id, row);
+    }
+    row.set(s.start_time, s);
+  }
+  const columns = [...colSet].sort((a, b) => a.localeCompare(b));
+  return { columns, byExpert };
+}
+
+/**
  * 대상 슬롯 시간대에 이미 다른 예약을 가진 스타트업 id 집합(강제 배정 모달의 비활성 대상).
  * 동시간 중복은 관리자도 우회 불가하므로(db_schema §4.3) 후보에서 회색 처리한다.
  */

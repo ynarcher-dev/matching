@@ -1,6 +1,7 @@
 import type { AppRole, AppUser } from '@/types/auth';
 import type { EventStatus } from '@/types/event';
 import type { AssignableUser, BookingType, SessionStatus } from '@/types/eventDetail';
+import type { NotificationStatus } from '@/types/notification';
 import type { AuthChannel, OtpChannel, OtpStatus, ParticipantRole } from '@/types/user';
 
 /**
@@ -54,6 +55,27 @@ export const CHANNEL_LABELS: Record<OtpChannel | AuthChannel, string> = {
   ALIMTALK: '알림톡',
 };
 
+/** 알림 발송 상태 한국어 라벨 (notification_logs.status). */
+export const NOTIFICATION_STATUS_LABELS: Record<NotificationStatus, string> = {
+  PENDING: '대기/재시도',
+  SENT: '발송 완료',
+  FAILED: '영구 실패',
+};
+
+/** 알림 종류 한국어 라벨 (notification_logs.notification_type). 미정의 종류는 원문 노출. */
+export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  BOOKING_CREATED: '예약 확정',
+  BOOKING_CHANGED: '예약 변경',
+  BOOKING_CANCELLED: '예약 취소',
+  EVENT_BOOKING_OPEN: '예약 시작 안내',
+  PARTICIPANT_LOGIN_OTP: '로그인 인증번호',
+};
+
+/** 알림 종류 라벨 해석(미정의 시 원문 그대로). */
+export function notificationTypeLabel(type: string): string {
+  return NOTIFICATION_TYPE_LABELS[type] ?? type;
+}
+
 /** 최근 OTP 발송 상태 한국어 라벨 (admin_participant_auth_overview). */
 export const OTP_STATUS_LABELS: Record<OtpStatus, string> = {
   SENT: '발송됨',
@@ -74,6 +96,11 @@ export function participantLabel(u: AssignableUser): string {
     return u.representative_name ? `${u.company_name} · ${u.representative_name}` : u.company_name;
   }
   return u.expert_organization ? `${u.name} · ${u.expert_organization}` : u.name;
+}
+
+/** 배치 표 셀 표기: 스타트업 기업명만(없으면 이름). */
+export function companyName(u: AssignableUser): string {
+  return u.company_name ?? u.name;
 }
 
 /**

@@ -8,6 +8,7 @@ const validForm = {
   max_sessions_per_startup: 3,
   timezone: 'Asia/Seoul',
   allow_startup_self_booking: false,
+  allow_duplicate_expert: false,
   booking_start: '2026-07-01T09:00',
   booking_end: '2026-07-05T18:00',
   event_start: '2026-07-10T10:00',

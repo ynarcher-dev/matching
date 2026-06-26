@@ -14,7 +14,10 @@
 | **Phase 3: 로그인 & 레이아웃** | [인증 및 공통 셸 명세 (page_auth_layout.md)](./page_auth_layout.md)<br>[인증·권한·트랜잭션 정책 (security_transactions.md)](./security_transactions.md) |
 | **Phase 4: 관리자 코어 기능** | [행사 목록 (page_admin_event_list.md)](./page_admin_event_list.md)<br>[대시보드 및 조정 (page_admin_event_detail.md)](./page_admin_event_detail.md)<br>[AI 자동배치 (page_admin_ai_allocation.md)](./page_admin_ai_allocation.md)<br>[유저 DB CSV 업로드 (page_admin_user_management.md)](./page_admin_user_management.md) |
 | **Phase 5: 스타트업 기능** | [스타트업 예약 관리 (page_startup_booking.md)](./page_startup_booking.md)<br>[데이터베이스 스케줄 겹침 방지 (db_schema.md)](./db_schema.md) |
-| **Phase 6: 전문가 기능** | [전문가 시간표 및 일지 작성 (page_expert_dashboard.md)](./page_expert_dashboard.md) |
+| **Phase 6: 전문가 기능** | [전문가 시간표 및 일지 작성 (page_expert_dashboard.md)](./page_expert_dashboard.md)<br>[만족도 조사 커스터마이징 (page_survey_customization.md)](./page_survey_customization.md) — EXPERT 설문(슬라이스 D) |
+| **부가: 만족도 커스터마이징** | [만족도 조사 커스터마이징 기능 명세 (page_survey_customization.md)](./page_survey_customization.md) |
+
+사용자에게 서비스를 설명하거나 행사 전 안내문을 작성할 때는 [비즈니스 매칭 시스템 사용자 설명 가이드 (user_guide.md)](./user_guide.md)를 기준으로 합니다.
 
 ---
 

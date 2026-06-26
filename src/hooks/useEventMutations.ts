@@ -13,6 +13,7 @@ function toEventColumns(values: EventFormValues) {
     max_sessions_per_startup: values.max_sessions_per_startup,
     timezone,
     allow_startup_self_booking: values.allow_startup_self_booking,
+    allow_duplicate_expert: values.allow_duplicate_expert,
     booking_start: localInputToIso(values.booking_start, timezone),
     booking_end: localInputToIso(values.booking_end, timezone),
     event_start: localInputToIso(values.event_start, timezone),

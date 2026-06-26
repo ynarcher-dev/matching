@@ -28,6 +28,8 @@ export interface EventRow {
   event_end: string;
   max_sessions_per_startup: number;
   allow_startup_self_booking: boolean;
+  /** 한 행사에서 동일 전문가와 2회 이상 예약 허용 여부(기본 FALSE = 1회 제한). */
+  allow_duplicate_expert: boolean;
   timezone: string;
   created_at: string;
 }

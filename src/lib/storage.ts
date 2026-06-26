@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 import type { ParticipantRole } from '@/types/user';
 
@@ -110,16 +111,26 @@ export async function removeParticipantFile(path: string): Promise<void> {
   await supabase.storage.from(bucket).remove([objectKey]);
 }
 
-/** 저장된 객체 경로로 단기 Signed URL 을 생성한다(기본 60초). */
-export async function createParticipantSignedUrl(
+/**
+ * 주어진 Supabase 클라이언트로 객체 경로(`{bucket}/...`)의 단기 Signed URL 을 만든다.
+ * 운영진은 `supabase`, 참가자(전문가/스타트업)는 `participantClient` 를 넘겨 RLS 를 적용한다.
+ */
+export async function createSignedUrlWithClient(
+  client: SupabaseClient,
   path: string,
   expiresInSec = 60,
 ): Promise<string> {
   const bucket = path.split('/')[0] as FileBucket;
   const objectKey = path.slice(bucket.length + 1);
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUrl(objectKey, expiresInSec);
+  const { data, error } = await client.storage.from(bucket).createSignedUrl(objectKey, expiresInSec);
   if (error || !data) throw new Error(`파일 링크 생성에 실패했습니다: ${error?.message ?? ''}`);
   return data.signedUrl;
+}
+
+/** 저장된 객체 경로로 단기 Signed URL 을 생성한다(운영진 클라이언트, 기본 60초). */
+export async function createParticipantSignedUrl(
+  path: string,
+  expiresInSec = 60,
+): Promise<string> {
+  return createSignedUrlWithClient(supabase, path, expiresInSec);
 }
