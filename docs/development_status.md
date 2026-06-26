@@ -21,6 +21,11 @@
   - [참가자 DB 관리 (page_admin_user_management.md)](./page_admin_user_management.md)
 * **Phase 5 시작 전**: [스타트업 예약 명세서 (page_startup_booking.md)](./page_startup_booking.md) 필독
 * **Phase 6 시작 전**: [전문가 대시보드 명세서 (page_expert_dashboard.md)](./page_expert_dashboard.md) 필독
+* **Phase 7 재정의/후속 작업 전**: 아래 신규 기획 문서를 함께 읽고 범위를 확정합니다.
+  - [무료 운영 전환 및 이름/전화번호 로그인 기획](./free_login_transition.md)
+  - [현장담당자 기업별 사진 업로드 기획](./staff_company_photo_upload.md)
+  - [행사별 카카오톡/SMS 알림 API 연동 기획](./event_notification_api_plan.md)
+  - [QR 서명 체크인 기능 보류 결정](./attendance_signature_policy.md)
 
 ---
 
@@ -103,13 +108,17 @@
 - [x] 디지털 상담일지 작성 및 완료 처리 기능 연동 — `CounselingLogModal` 임시저장(`save_counseling_draft`)/최종 제출(`submit_counseling_log`, 5점 필수→COMPLETED 전환). 자유 의견·후속 연계 토글+메모.
 - [x] 상담일지 수정 이력, 공개 범위 및 후속 연계 정보 구현 — 제출 후 재수정 시 감사 로그 기록(RPC `EDIT_COUNSELING_LOG`)·"수정 이력 기록" 안내, 점수 항상 비공개·텍스트 의견만 공개 토글(`is_public`). 이전 상담 이력 `/expert/history` `ExpertHistoryView`(전 행사 통합·읽기전용 `CounselingLogSummary`).
 
-### [~] Phase 7: 알림 서비스 및 엑셀 결과 내보내기 (종료 단계)
-> **자체 개발 가능 항목부터 진행 중.** 외부 서비스 API(실 알림톡/SMS 발송)는 공급사 계정·발신번호·템플릿 심사가 선행돼야 하므로 어댑터(`notifier.ts`)만 준비된 상태로 두고, 모킹 기반 인프라·QR·엑셀을 먼저 구현한다.
-- [x] **알림톡(카카오톡) 모킹 전송 클래스 + 알림 이벤트 훅 연결 (슬라이스 1 코드+배포 완료, 2026-06-26)** — 기존 `_shared/notifier.ts`(MockNotifier) 재사용 + **알림 이벤트 훅을 DB 트리거로 연결**: `booking_history` AFTER INSERT(예약 CREATED/CHANGED/CANCELLED → 스타트업), `events` AFTER UPDATE OF status(→ BOOKING 전환 시 참가 스타트업 전원 예약 시작 안내). 트리거는 PENDING 로그만 적재(비동기 발송 분리). `0034_notification_infra.sql`.
-- [x] **알림 중복 방지 키 + 지수 백오프 3회 + 실패 현황 구현 (슬라이스 1 완료)** — `_enqueue_notification`(채널 도출: 휴대폰→ALIMTALK / 이메일→EMAIL, `idempotency_key` `ON CONFLICT DO NOTHING` 멱등) + `claim_due_notifications`(FOR UPDATE SKIP LOCKED + next_retry_at 2분 가시성 타임아웃, service_role) + `mark_notification_sent`/`mark_notification_failed`(retry_count++ → 3회 도달 시 FAILED, 그 외 `_notif_backoff`=1분·5분 후 PENDING 재시도) + `retry_notification`(ADMIN 수동 재시도, FAILED→PENDING 초기화·감사). 발송 워커 Edge `notification-dispatch`(claim→notifier→mark, `x-dispatch-secret` 가드). 관리자 화면: 행사 상세 **"알림 현황" 탭**(`NotificationLogPanel`, 상태별 요약·발송 로그·마스킹 수신처·오류·수동 재시도, 15초 폴링). Cron(net.http_post→Edge)은 Vault 시크릿(`notif_dispatch_url`/`notif_dispatch_secret`) 설정 시 자동 등록(미설정이면 건너뜀). 신규 `types/notification.ts`·`lib/notification.ts`(마스킹·집계·정렬 순수함수, +test 12)·`hooks/useNotifications.ts`·`components/admin/NotificationLogPanel.tsx`. `lint`·`typecheck`·`build`·`test`(**188**, 신규 12) 통과. **✅ 라이브 배포 완료**: `0034` `db push`(Local=Remote 0001~0034) + Edge `notification-dispatch` deploy + `NOTIF_DISPATCH_SECRET` 설정 + 스모크(무/오답 시크릿→401, 정답→200 `{claimed:0}`). ⚠ 미완: ① 자동 Cron 활성화(Vault 시크릿 2건 등록 — service_role 키 필요) ② 라이브 트리거 라운드트립(예약 생성→PENDING 적재→디스패치→SENT). ③ 미예약 리마인드(BookingStatsPanel "알림 재발송" 플레이스홀더)는 후속 enqueue 연동 대상.
-- [x] **엑셀 파일 내보내기 라이브러리 연동 및 데이터 가공 모듈 구현 (슬라이스 3 코드 완료, 2026-06-26)** — `exceljs@4.4.0` 연동. 행사 1건 = **5개 시트 워크북**(예약 현황·출석 현황·상담 결과·만족도 결과·참가자 명단) 1파일로 다운로드. 관리자 행사 상세 우상단 **"엑셀 내보내기" 버튼**(클릭 시 즉시 조회→워크북→다운로드, 머리글 굵게·열너비·머리글 고정). 신규 `lib/excel.ts`(exceljs 워크북 빌더·Blob 다운로드 I/O 래퍼)·`lib/eventExport.ts`(도메인→시트 변환 순수함수 5종 + 파일명, 기존 booking/attendance/counselingReport/surveyReport 집계 재사용)·`hooks/useEventExport.ts`(operator supabase, 버튼 클릭 시 슬롯·테이블·참가자·출석·상담문항/일지·만족도문항/응답 병렬 조회). **신규 마이그레이션 없음**(기존 ADMIN RLS 테이블 조회만 — 배포 불필요). `lint`·`typecheck`·`build`·`test`(**197**, 신규 eventExport.test.ts 9) 통과. ⚠ 라이브 미검증(관리자 로그인 + 데이터 있는 행사에서 실제 다운로드).
-- [ ] 30초 만료 서명 QR 및 현장 스태프 수동 출석 처리 구현 *(자체 개발 — **애드온으로 보류**, 추후 진행)*
-- [x] 행사 만족도 집계 및 결과 시트 구현 — **만족도 조사 커스터마이징 슬라이스 C에서 완료**(응답률·문항별 집계·CSV 내보내기). 화면 리포트는 CSV+UTF-8 BOM, **종합 엑셀(xlsx)은 슬라이스 3에서 5개 시트 중 "만족도 결과" 탭으로 통합**.
+### [~] Phase 7: 무료 운영 전환, 현장 사진, 알림 API, 결과 내보내기 (종료 단계)
+> **2026-06-26 범위 재정의.** 로그인은 전면 무료 운영을 우선해 `이름 + 휴대전화번호` 방식으로 전환하는 방향을 검토한다. 알림은 인증과 분리하고, 행사별로 `발송 안 함 / 카카오 알림톡만 / SMS만 / 알림톡+SMS` 정책을 선택할 수 있게 한다. 기업별 현장 사진 업로드를 신규 범위로 추가한다. 30초 만료 서명 QR 체크인은 필요 없다고 판단해 보류한다.
+- [x] **무료 운영 전환: 참가자 로그인 방법을 이름 + 휴대전화번호로 변경 완료(2026-06-26, `0035`)** — 외부 발송(OTP) 의존성을 제거하고, 기존 참가자 커스텀 JWT/RLS/`participantClient`/역할 라우팅을 재사용한다. 신규 Edge `participant-login` + RPC `login_participant_by_name_phone`(`match_participant_by_name_phone`·`normalize_name` 정규화: 공백 제거+소문자, 전화 숫자 정규화). 정확히 1명 일치할 때만 JWT 발급(0명/2명+=모호→실패), 미등록·모호는 동일 generic 401, IP 해시 기준 rate limit(`participant_login_attempts`, 10분 창 20회 초과 시 429). 기존 OTP 인프라(0009~0011·`participant-otp-*`)는 보존(비활성). 프론트: `participantLoginSchema`(이름+전화), `authStore.loginParticipant`, `ParticipantLoginForm` 단일 폼. **라이브 검증 완료**(시드 전문가 김민준/010-2001-1001 로그인 200·JWT→PostgREST 본인행 200·변조토큰 401·공백정규화 매칭·anon RPC/테이블 42501). 참조: [무료 운영 전환 및 이름/전화번호 로그인 기획](./free_login_transition.md), [인증 및 공통 레이아웃 명세서](./page_auth_layout.md), [인증·권한·트랜잭션 정책](./security_transactions.md).
+- [x] **무료 운영 모드와 유료 알림 확장 모드 분리 완료(2026-06-26)** — OTP/SMS/알림톡 자동 발송이 로그인 필수 경로에서 완전히 분리됨(로그인은 이름+전화번호만 사용). 무료 운영에서는 수동 안내와 1회용 로그인 링크(`emergency-login`)를 사용한다. OTP 자동 발송은 유료 알림 확장(아래 #4·#5)에서 선택적으로 재활성화. 참조: [무료 운영 전환 및 이름/전화번호 로그인 기획](./free_login_transition.md), [무료 운영 전환 기획 메모](./free_auth_notification_planning.md).
+- [x] **현장담당자 기업별 사진 업로드 기능 추가 완료(2026-06-26, `0036`)** — `/staff/photos` 모바일 전용 화면(행사 선택 → 기업 검색/선택 → 네이티브 카메라(`accept=image/* capture=environment`)/앨범 → 미리보기 → 일괄 업로드, 클라이언트 캔버스 리사이즈). 신규 `company_photos` 테이블 + `event-photos` 비공개 버킷 + RLS(테이블·storage: 업로드=ADMIN/STAFF, 조회=ADMIN/STAFF·기업본인, soft delete + 객체 제거). 관리자 행사 상세 `사진 현황` 탭(요약 4지표·기업별 개수/마지막 업로드·미등록 강조·검수[조회/삭제/보완 업로드]). 신규 `types/companyPhoto`·`lib/companyPhoto`(검증·경로·리사이즈·현황 집계 순수함수 +test9)·`hooks/useCompanyPhotos`·`views/staff/StaffPhotosView`·`components/staff/{CompanyPhotoList,CompanyPhotoUploadPanel}`·`components/admin/PhotoStatusPanel` + STAFF 네비/라우트. lint/typecheck/build/test(205) 통과. **db push 완료**(Local=Remote 0001~0036), anon 스모크(SELECT 200[]·INSERT 42501·버킷 RLS) 차단 확인. ⚠ 라이브 UI 라운드트립 미검증(STAFF 운영진 로그인 + 카메라 업로드). 참조: [현장담당자 기업별 사진 업로드 기획](./staff_company_photo_upload.md).
+- [ ] **행사별 카카오톡/SMS 알림 정책 설정 구현** — 행사별로 `발송 안 함`, `카카오 알림톡만`, `SMS만`, `카카오 알림톡 + SMS fallback`을 선택할 수 있게 한다. 실제 발송은 공급사 API 키/발신번호/템플릿 설정이 들어오면 활성화되도록 준비한다. 참조: [행사별 카카오톡/SMS 알림 API 연동 기획](./event_notification_api_plan.md).
+- [ ] **실공급사 알림 어댑터 연결 준비** — 기존 Mock/알림 로그/재시도 인프라에 Solapi 등 실제 공급사 어댑터, 템플릿 코드, 테스트 발송, 발송 활성화 플래그를 연결한다. API 키가 없으면 Mock 또는 발송 안 함으로 안전하게 동작해야 한다. 참조: [행사별 카카오톡/SMS 알림 API 연동 기획](./event_notification_api_plan.md).
+- [x] **알림 모킹/로그/재시도 인프라 기초 구현 완료** — `_shared/notifier.ts` MockNotifier, `notification_logs`, 중복 방지 키, 백오프 3회, `notification-dispatch`, 관리자 알림 현황 탭까지 코드+배포 완료. 후속은 행사별 채널 정책과 실제 공급사 키 연동.
+- [x] **엑셀 파일 내보내기 라이브러리 연동 및 데이터 가공 모듈 구현 완료** — `exceljs@4.4.0` 기반 5개 시트 워크북(예약 현황·출석 현황·상담 결과·만족도 결과·참가자 명단) 다운로드 구현 완료. ⚠ 라이브 미검증(관리자 로그인 + 데이터 있는 행사에서 실제 다운로드).
+- [x] **행사 만족도 집계 및 결과 시트 구현 완료** — 만족도 조사 커스터마이징 슬라이스 C와 종합 엑셀 내보내기에 통합 완료.
+- [x] **30초 만료 서명 QR 체크인 기능은 보류/제외 결정** — 현장 관리자 또는 전문가가 직접 출석을 찍는 기존 방식으로 충분하다고 판단. 별도 QR 서명 체크인 플로우는 만들지 않는다. 참조: [QR 서명 체크인 기능 보류 결정](./attendance_signature_policy.md).
 
 ---
 

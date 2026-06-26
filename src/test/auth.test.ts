@@ -1,44 +1,45 @@
 import { describe, it, expect } from 'vitest';
 import {
-  otpRequestSchema,
-  otpVerifySchema,
-  classifyIdentifier,
+  participantLoginSchema,
   normalizePhone,
-  normalizeOtp,
+  normalizeName,
 } from '@/schemas/authSchemas';
 import { homePathFor, ROLE_NAV } from '@/lib/navigation';
 import { displayName } from '@/lib/labels';
 import { decodeJwtPayload, isJwtExpired } from '@/lib/participantSession';
 import type { AppUser } from '@/types/auth';
 
-describe('authSchemas (OTP)', () => {
+describe('authSchemas (이름 + 휴대전화 로그인)', () => {
   it('normalizePhone: 하이픈/공백 제거 후 숫자만', () => {
     expect(normalizePhone('010-1234-5678')).toBe('01012345678');
     expect(normalizePhone(' 010 1234 5678 ')).toBe('01012345678');
   });
 
-  it('normalizeOtp: 숫자만 남긴다', () => {
-    expect(normalizeOtp('12 34-56')).toBe('123456');
+  it('normalizeName: 모든 공백 제거 + 소문자 (서버 normalize_name 과 동일)', () => {
+    expect(normalizeName('홍 길동')).toBe('홍길동');
+    expect(normalizeName(' 홍길동 ')).toBe('홍길동');
+    expect(normalizeName('John Smith')).toBe('johnsmith');
   });
 
-  it('classifyIdentifier: 이메일/휴대전화/무효 판별', () => {
-    expect(classifyIdentifier('user@example.com')).toBe('email');
-    expect(classifyIdentifier('010-1234-5678')).toBe('phone');
-    expect(classifyIdentifier('01012345678')).toBe('phone');
-    expect(classifyIdentifier('hello')).toBe('invalid');
-    expect(classifyIdentifier('123')).toBe('invalid');
+  it('participantLoginSchema: 이름+휴대전화 정상 입력 허용', () => {
+    expect(
+      participantLoginSchema.safeParse({ name: '홍길동', phone: '010-1234-5678' }).success,
+    ).toBe(true);
+    expect(
+      participantLoginSchema.safeParse({ name: '홍길동', phone: '01012345678' }).success,
+    ).toBe(true);
   });
 
-  it('otpRequestSchema: 이메일과 휴대전화 모두 허용, 형식 오류는 거부', () => {
-    expect(otpRequestSchema.safeParse({ identifier: 'a@b.com' }).success).toBe(true);
-    expect(otpRequestSchema.safeParse({ identifier: '010-1234-5678' }).success).toBe(true);
-    expect(otpRequestSchema.safeParse({ identifier: '그냥텍스트' }).success).toBe(false);
-  });
-
-  it('otpVerifySchema: 표시용 구분자 포함 6자리를 정규화, 그 외 거부', () => {
-    expect(otpVerifySchema.parse({ code: '12 34 56' }).code).toBe('123456');
-    expect(otpVerifySchema.safeParse({ code: '12345' }).success).toBe(false);
-    expect(otpVerifySchema.safeParse({ code: '1234567' }).success).toBe(false);
+  it('participantLoginSchema: 이름 누락·전화 형식 오류는 거부', () => {
+    expect(participantLoginSchema.safeParse({ name: '', phone: '01012345678' }).success).toBe(
+      false,
+    );
+    expect(participantLoginSchema.safeParse({ name: '홍길동', phone: '12345' }).success).toBe(
+      false,
+    );
+    expect(
+      participantLoginSchema.safeParse({ name: '홍길동', phone: '010-1234' }).success,
+    ).toBe(false);
   });
 });
 

@@ -15,6 +15,7 @@ import { UserListView } from '@/views/admin/UserListView';
 import { StartupPortalView } from '@/views/startup/StartupPortalView';
 import { ExpertDashboardView } from '@/views/expert/ExpertDashboardView';
 import { ExpertHistoryView } from '@/views/expert/ExpertHistoryView';
+import { StaffPhotosView } from '@/views/staff/StaffPhotosView';
 
 /**
  * 라우트 정의 (page_auth_layout.md §1.3 역할별 진입 + §2.4 메뉴).
@@ -50,6 +51,7 @@ export function AppRoutes() {
               path="/staff/check-in"
               element={<PlaceholderView title="출석 체크" description="현장 출석 처리(원클릭·QR 보조)." />}
             />
+            <Route path="/staff/photos" element={<StaffPhotosView />} />
           </Route>
 
           {/* 전문가 */}

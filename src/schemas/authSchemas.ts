@@ -1,48 +1,27 @@
 import { z } from 'zod';
 
 /**
- * 로그인 폼 검증 (page_auth_layout.md §1.2).
+ * 로그인 폼 검증 (page_auth_layout.md §1, free_login_transition.md).
  *
- * 참가자(EXPERT/STARTUP)는 등록된 이메일 또는 휴대전화로 6자리 OTP를 받아 로그인한다.
- *   1단계: 식별자(이메일 또는 휴대전화) 제출 → OTP 요청
- *   2단계: 6자리 OTP 제출 → 검증
+ * 참가자(EXPERT/STARTUP)는 외부 발송에 의존하지 않도록 등록된 "이름 + 휴대전화번호"
+ * 정확일치로 로그인한다(2026-06-26 무료 운영 전환). 이름은 공백/대소문자를 정규화하고,
+ * 휴대전화는 숫자만 남겨 비교한다. 실제 매칭·계정 존재 여부는 서버가 판정한다.
  * 운영진(ADMIN/STAFF)은 Supabase Auth(이메일/비밀번호).
  */
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** 휴대전화: 표시용 하이픈/공백 제거 후 숫자만 남긴다. */
 export const normalizePhone = (raw: string): string => raw.replace(/[^0-9]/g, '');
 
-/** OTP: 숫자만 남긴다(공백/하이픈 허용 입력 정규화). */
-export const normalizeOtp = (raw: string): string => raw.replace(/[^0-9]/g, '');
+/** 이름: 모든 공백 제거 + 소문자(서버 normalize_name 과 동일 규칙). */
+export const normalizeName = (raw: string): string => raw.replace(/\s/g, '').toLowerCase();
 
-export type IdentifierKind = 'email' | 'phone' | 'invalid';
-
-/** 식별자가 이메일인지 휴대전화인지 판별한다(서버 발송 채널 선택과 무관한 클라이언트 형식 검증). */
-export function classifyIdentifier(raw: string): IdentifierKind {
-  const value = raw.trim();
-  if (EMAIL_RE.test(value)) return 'email';
-  const digits = normalizePhone(value);
-  // 국내 휴대전화 10~11자리(0으로 시작). 형식만 검증하고 실제 등록 여부는 서버가 판정.
-  if (/^0\d{9,10}$/.test(digits)) return 'phone';
-  return 'invalid';
-}
-
-export const otpRequestSchema = z.object({
-  identifier: z
+export const participantLoginSchema = z.object({
+  name: z.string().trim().min(1, '이름을 입력해 주세요.'),
+  phone: z
     .string()
-    .trim()
-    .min(1, '등록한 이메일 또는 휴대전화 번호를 입력해 주세요.')
-    .refine((v) => classifyIdentifier(v) !== 'invalid', '이메일 또는 휴대전화 번호 형식이 아닙니다.'),
-});
-
-export const otpVerifySchema = z.object({
-  code: z
-    .string()
-    .min(1, '인증번호를 입력해 주세요.')
-    .transform(normalizeOtp)
-    .refine((c) => /^\d{6}$/.test(c), '인증번호는 6자리입니다.'),
+    .min(1, '휴대전화 번호를 입력해 주세요.')
+    // 국내 휴대전화 10~11자리(0으로 시작). 형식만 검증하고 등록 여부는 서버가 판정.
+    .refine((v) => /^0\d{9,10}$/.test(normalizePhone(v)), '휴대전화 번호 형식이 아닙니다.'),
 });
 
 export const operatorLoginSchema = z.object({
@@ -50,6 +29,5 @@ export const operatorLoginSchema = z.object({
   password: z.string().min(1, '비밀번호를 입력해 주세요.'),
 });
 
-export type OtpRequestInput = z.infer<typeof otpRequestSchema>;
-export type OtpVerifyInput = z.infer<typeof otpVerifySchema>;
+export type ParticipantLoginInput = z.infer<typeof participantLoginSchema>;
 export type OperatorLoginInput = z.infer<typeof operatorLoginSchema>;

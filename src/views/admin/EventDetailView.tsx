@@ -16,6 +16,7 @@ import { SurveyReportPanel } from '@/components/admin/SurveyReportPanel';
 import { CounselingBuilderPanel } from '@/components/admin/CounselingBuilderPanel';
 import { CounselingReportPanel } from '@/components/admin/CounselingReportPanel';
 import { NotificationLogPanel } from '@/components/admin/NotificationLogPanel';
+import { PhotoStatusPanel } from '@/components/admin/PhotoStatusPanel';
 import {
   useAssignableUsers,
   useEventDetail,
@@ -37,7 +38,8 @@ type DetailTab =
   | 'counseling-report'
   | 'survey'
   | 'survey-report'
-  | 'notifications';
+  | 'notifications'
+  | 'photos';
 
 const TABS: { value: DetailTab; label: string }[] = [
   { value: 'assign', label: '참가자·테이블' },
@@ -49,6 +51,7 @@ const TABS: { value: DetailTab; label: string }[] = [
   { value: 'survey', label: '만족도 설정' },
   { value: 'survey-report', label: '만족도 결과' },
   { value: 'notifications', label: '알림 현황' },
+  { value: 'photos', label: '사진 현황' },
 ];
 
 /** 상태별 기본 진입 탭 (page_admin_event_detail.md §1.1 상태 전이 화면 대응). */
@@ -234,6 +237,15 @@ export function EventDetailView() {
 
       {activeTab === 'notifications' && (
         <NotificationLogPanel eventId={eventId} timezone={event.timezone} />
+      )}
+
+      {activeTab === 'photos' && (
+        <PhotoStatusPanel
+          eventId={eventId}
+          participants={participants}
+          userById={userById}
+          timezone={event.timezone}
+        />
       )}
     </div>
   );

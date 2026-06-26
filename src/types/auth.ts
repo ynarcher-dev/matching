@@ -22,17 +22,8 @@ export interface AppUser {
   is_super_admin: boolean;
 }
 
-/** OTP 검증 성공 Edge Function 응답(커스텀 JWT + 프로필). */
+/** 참가자 로그인 성공 Edge Function 응답(커스텀 JWT + 프로필). */
 export interface ParticipantLoginResult {
   token: string;
   user: AppUser;
-}
-
-/**
- * OTP 요청 Edge Function 응답(계정 열거 방지: 존재 여부와 무관하게 항상 동일 형태).
- * `retry_after`는 재요청 가능까지 남은 초로, UI 의 재전송 카운트다운에만 쓴다.
- */
-export interface OtpRequestResult {
-  ok: true;
-  retry_after: number;
 }

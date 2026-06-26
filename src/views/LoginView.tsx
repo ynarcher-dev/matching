@@ -9,8 +9,8 @@ import { OperatorLoginForm } from '@/components/auth/OperatorLoginForm';
 import { Card } from '@/components/common/Card';
 
 const TAB_GUIDE: Record<LoginTab, string> = {
-  STARTUP: '등록한 이메일 또는 휴대전화로 인증번호를 받아 로그인하세요.',
-  EXPERT: '등록한 이메일 또는 휴대전화로 인증번호를 받아 로그인하세요.',
+  STARTUP: '등록한 이름과 휴대전화 번호로 로그인하세요.',
+  EXPERT: '등록한 이름과 휴대전화 번호로 로그인하세요.',
   OPERATOR: '운영진 이메일과 비밀번호로 로그인하세요.',
 };
 
@@ -48,7 +48,7 @@ export function LoginView() {
           {tab === 'OPERATOR' ? (
             <OperatorLoginForm onSuccess={onSuccess} />
           ) : (
-            <ParticipantLoginForm key={tab} role={tab} onSuccess={onSuccess} />
+            <ParticipantLoginForm key={tab} onSuccess={onSuccess} />
           )}
         </Card>
 

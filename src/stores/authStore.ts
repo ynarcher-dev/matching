@@ -11,7 +11,6 @@ import type {
   AppUser,
   AuthMode,
   AuthStatus,
-  OtpRequestResult,
   ParticipantLoginResult,
 } from '@/types/auth';
 
@@ -37,10 +36,8 @@ interface AuthState {
   /** 앱 마운트 시 1회: 저장된 세션/토큰을 검증해 status 를 확정한다. */
   bootstrap: () => Promise<void>;
   loginOperator: (email: string, password: string) => Promise<AppUser>;
-  /** 1단계: 등록 연락처로 OTP 발송 요청(계정 열거 방지 generic 응답). */
-  requestOtp: (identifier: string) => Promise<OtpRequestResult>;
-  /** 2단계: 6자리 OTP 검증 → 커스텀 JWT 발급·세션 설정. */
-  verifyOtp: (identifier: string, code: string) => Promise<AppUser>;
+  /** 참가자: 이름 + 휴대전화번호 정확일치 → 커스텀 JWT 발급·세션 설정. */
+  loginParticipant: (name: string, phone: string) => Promise<AppUser>;
   /** 현장 예외용 1회용 로그인 링크 토큰 소비 → 커스텀 JWT 발급·세션 설정. */
   consumeEmergencyToken: (token: string) => Promise<AppUser>;
   logout: () => Promise<void>;
@@ -110,39 +107,26 @@ export const useAuthStore = create<AuthState>()(
         return profile;
       },
 
-      requestOtp: async (identifier) => {
-        try {
-          const { data, error } = await supabase.functions.invoke<OtpRequestResult>(
-            'participant-otp-request',
-            { body: { identifier: identifier.trim() } },
-          );
-          // 계정 열거 방지: 4xx(자격/존재) 구분 없이 서버는 generic 200 을 반환한다.
-          // 여기서 error 는 사실상 네트워크/서버(5xx)만 의미한다.
-          if (error) throw new AuthError('network', error.message);
-          return data ?? { ok: true, retry_after: 60 };
-        } catch (e) {
-          if (e instanceof AuthError) throw e;
-          throw new AuthError('network', (e as Error).message);
-        }
-      },
-
-      verifyOtp: async (identifier, code) => {
+      loginParticipant: async (name, phone) => {
         let result: ParticipantLoginResult;
         try {
           const { data, error } = await supabase.functions.invoke<ParticipantLoginResult>(
-            'participant-otp-verify',
-            { body: { identifier: identifier.trim(), code } },
+            'participant-login',
+            { body: { name: name.trim(), phone: phone.trim() } },
           );
           if (error) {
-            // FunctionsHttpError(4xx)=OTP 불일치/만료, 그 외=네트워크/서버
+            // 4xx(401 미일치/모호, 429 시도과다)=자격 오류, 그 외=네트워크/서버
             const status = (error as { context?: { status?: number } }).context?.status;
+            if (status === 429) {
+              throw new AuthError('invalid', '로그인 시도가 많습니다. 잠시 후 다시 시도해 주세요.');
+            }
             if (status && status >= 400 && status < 500) {
-              throw new AuthError('invalid', '인증번호가 올바르지 않거나 만료되었습니다.');
+              throw new AuthError('invalid', '이름 또는 휴대전화 번호가 등록 정보와 일치하지 않습니다.');
             }
             throw new AuthError('network', error.message);
           }
           if (!data?.token || !data.user) {
-            throw new AuthError('invalid', '인증번호가 올바르지 않거나 만료되었습니다.');
+            throw new AuthError('invalid', '이름 또는 휴대전화 번호가 등록 정보와 일치하지 않습니다.');
           }
           result = data;
         } catch (e) {

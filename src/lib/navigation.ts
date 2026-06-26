@@ -24,7 +24,10 @@ export const ROLE_NAV: Record<AppRole, NavItem[]> = {
     { label: '참가자 DB 관리', path: '/admin/users' },
     { label: '설정', path: '/admin/settings' },
   ],
-  STAFF: [{ label: '출석 체크', path: '/staff/check-in' }],
+  STAFF: [
+    { label: '출석 체크', path: '/staff/check-in' },
+    { label: '현장 사진', path: '/staff/photos' },
+  ],
   EXPERT: [
     { label: '오늘의 스케줄', path: '/expert/dashboard' },
     { label: '이전 상담 이력', path: '/expert/history' },
