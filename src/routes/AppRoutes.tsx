@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { homePathFor } from '@/lib/navigation';
-import { RequireAuth, RequireRole } from '@/routes/guards';
+import { RequireAuth, RequireRole, RequireSuperAdmin } from '@/routes/guards';
 import { AppShell } from '@/components/common/AppShell';
 import { FullScreenLoader } from '@/components/common/FullScreenLoader';
 import { LoginView } from '@/views/LoginView';
@@ -16,6 +16,8 @@ import { StartupPortalView } from '@/views/startup/StartupPortalView';
 import { ExpertDashboardView } from '@/views/expert/ExpertDashboardView';
 import { ExpertHistoryView } from '@/views/expert/ExpertHistoryView';
 import { StaffPhotosView } from '@/views/staff/StaffPhotosView';
+import { NotificationSettingsView } from '@/views/admin/NotificationSettingsView';
+import { OperatorListView } from '@/views/admin/OperatorListView';
 
 /**
  * 라우트 정의 (page_auth_layout.md §1.3 역할별 진입 + §2.4 메뉴).
@@ -39,10 +41,12 @@ export function AppRoutes() {
               element={<AiAllocationView />}
             />
             <Route path="/admin/users" element={<UserListView />} />
-            <Route
-              path="/admin/settings"
-              element={<PlaceholderView title="설정" description="운영 환경 설정." />}
-            />
+            <Route path="/admin/settings" element={<NotificationSettingsView />} />
+          </Route>
+
+          {/* 최고관리자 전용 */}
+          <Route element={<RequireSuperAdmin />}>
+            <Route path="/admin/operators" element={<OperatorListView />} />
           </Route>
 
           {/* 현장 스태프 */}

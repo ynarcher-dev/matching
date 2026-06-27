@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
-import { ROLE_NAV } from '@/lib/navigation';
+import { navItemsFor } from '@/lib/navigation';
 import { ROLE_LABELS } from '@/lib/labels';
 
 /**
@@ -14,7 +14,7 @@ export function Sidebar() {
   const { sidebarOpen, closeSidebar } = useUiStore();
   if (!user) return null;
 
-  const items = ROLE_NAV[user.role];
+  const items = navItemsFor(user);
 
   return (
     <>

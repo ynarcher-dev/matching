@@ -56,7 +56,9 @@
 ### 프론트엔드 (전부 operator `supabase` 클라이언트)
 - `types/companyPhoto.ts`, `lib/companyPhoto.ts` — 검증·경로빌더·캔버스 리사이즈(1600px/JPEG 0.82)·Signed URL(batch)·현황 집계(`buildCompanyStatuses`/`summarizePhotoStatus`/`filterCompanyStatuses`) 순수함수.
 - `hooks/useCompanyPhotos.ts` — 조회 / 업로드(리사이즈→업로드→INSERT, 부분 성공) / soft delete(+객체 제거) / Signed URL.
-- `views/staff/StaffPhotosView.tsx` + `components/staff/{CompanyPhotoList, CompanyPhotoUploadPanel}` — 행사 선택 → 기업 검색/선택 → 카메라(`accept=image/* capture=environment`)/앨범 → 미리보기 → 일괄 업로드 → 삭제.
+- `views/staff/StaffPhotosView.tsx` + `components/staff/{CompanyPhotoList, CompanyPhotoUploadPanel}` — 행사 선택 → 기업 검색/선택 → 카메라 입력(`accept=image/* capture=environment`) → 미리보기 → 일괄 업로드 → 삭제.
+  - 당시 갭: 문서상 "앨범" UX까지 의도했지만, 초기 구현은 `capture="environment"`가 붙은 단일 파일 입력이라 모바일 브라우저에 따라 사진첩 선택 없이 카메라만 열릴 수 있었다.
+  - ✅ 후속 반영: `CompanyPhotoUploadPanel`이 `사진 촬영`(`capture="environment"`)과 `앨범에서 선택`(`multiple`, `capture` 없음) input/버튼을 분리했다.
 - `components/admin/PhotoStatusPanel.tsx` — 행사 상세 `사진 현황` 탭(요약 4지표·기업별 개수/마지막 업로드·미등록 강조·검수 펼침).
 - STAFF 네비 `현장 사진` + `/staff/photos` 라우트. EventDetailView 탭 추가.
 
@@ -65,10 +67,11 @@
 - db push(0036).
 - anon 스모크: `company_photos` SELECT 200 `[]`(행 노출 0) · INSERT 42501 차단 · `event-photos` 버킷 RLS 게이트 확인.
 - ⚠ **라이브 UI 라운드트립 미검증**(STAFF 운영진 로그인 + 실제 카메라 업로드).
+- ✅ **사진첩 선택 UX 후속 반영 완료**: `CompanyPhotoUploadPanel`에 `capture` 없는 별도 앨범 input/버튼 추가. 모바일 실기기 라운드트립 검증은 계속 권장.
 
 ---
 
-## 3. 수동 테스트 환경 세팅 (카메라 테스트용)
+## 3. 수동 테스트 환경 세팅 (카메라/사진첩 테스트용)
 
 > 영구 기능이 아니라 테스트 스캐폴딩. 마무리 시 정리 예정.
 
@@ -76,6 +79,7 @@
 - **HTTPS dev 서버**(폰 카메라 보안 컨텍스트용): `@vitejs/plugin-basic-ssl@^1.2.0`(dev 의존성) 추가 + `vite.config.ts`에 `HTTPS=1`일 때만 켜지는 opt-in 한 줄. 평소 `npm run dev`/build/test 무영향.
   - 실행: `HTTPS=1 npm run dev -- --host 192.168.0.18 --port 5173` → `https://192.168.0.18:5173/`
   - 폰: 같은 Wi-Fi 접속 → 자체 서명 인증서 경고 수락 → 운영진 탭 로그인 → 현장 사진.
+  - 후속 사진첩 검증: `사진 촬영` 버튼은 카메라를 열고, `앨범에서 선택` 버튼은 사진첩/파일 선택 UI를 열어야 한다. 앨범 버튼에는 `capture` 속성이 없어야 한다.
 - 테스트용 행사(STARTUP 참가): IR 매칭데이(51) / 상담 진행데이(16) / 바이오 파트너링데이(8).
 
 ### 마무리 시 정리 항목(요청 대기)
@@ -88,7 +92,8 @@
 ## 문서 동기화 / 진척도
 
 - `development_status.md` — Phase 7 항목 ①②③ 완료 표기.
-- `free_login_transition.md`, `staff_company_photo_upload.md` — 상태 헤더 "구현 완료".
+- `free_login_transition.md` — 상태 헤더 "구현 완료".
+- `staff_company_photo_upload.md` — 사진첩 선택 UX 후속 반영 완료 상태로 갱신.
 - `page_auth_layout.md §1`, `security_transactions.md §1` — 이름+전화번호 전환 노트 추가.
 - ⚠ 후속: `user_guide.md` 동기화 미반영.
 

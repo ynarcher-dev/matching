@@ -22,3 +22,13 @@ export function RequireRole({ allow }: { allow: AppRole[] }) {
   if (!allow.includes(user.role)) return <Navigate to={homePathFor(user.role)} replace />;
   return <Outlet />;
 }
+
+/** 최고관리자 전용 가드(운영자 관리·전역 권한). 아니면 본인 역할 홈으로. */
+export function RequireSuperAdmin() {
+  const user = useAuthStore((s) => s.user);
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'ADMIN' || !user.is_super_admin) {
+    return <Navigate to={homePathFor(user.role)} replace />;
+  }
+  return <Outlet />;
+}

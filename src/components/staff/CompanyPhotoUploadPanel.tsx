@@ -21,7 +21,7 @@ interface PendingItem {
 
 /**
  * 한 기업의 현장 사진 업로드/조회 패널 (docs/staff_company_photo_upload.md §3).
- * 네이티브 카메라(`accept=image/* capture`)로 한 장씩 추가 → 미리보기 → 여러 장 일괄 업로드.
+ * [사진 촬영](`capture="environment"`) / [앨범에서 선택](`multiple`) 버튼으로 추가 → 미리보기 → 일괄 업로드.
  * 기존 사진은 Signed URL 썸네일로 보여주고 삭제(soft delete)할 수 있다.
  */
 export function CompanyPhotoUploadPanel({
@@ -37,7 +37,8 @@ export function CompanyPhotoUploadPanel({
   const [localError, setLocalError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<CompanyPhotoRow | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
   const upload = useUploadCompanyPhotos(eventId);
   const remove = useDeleteCompanyPhoto(eventId);
@@ -76,7 +77,8 @@ export function CompanyPhotoUploadPanel({
       next.push({ file, url: URL.createObjectURL(file) });
     }
     setPending((cur) => [...cur, ...next]);
-    if (fileRef.current) fileRef.current.value = '';
+    if (cameraRef.current) cameraRef.current.value = '';
+    if (galleryRef.current) galleryRef.current.value = '';
   };
 
   const removePending = (idx: number) => {
@@ -111,19 +113,30 @@ export function CompanyPhotoUploadPanel({
         <p className="text-xs text-neutral-base/70">{company.contactName}</p>
       </div>
 
-      {/* 카메라/앨범 추가 */}
+      {/* 카메라 촬영 input */}
       <input
-        ref={fileRef}
+        ref={cameraRef}
         type="file"
         accept={PHOTO_ACCEPT_ATTR}
         capture="environment"
+        className="hidden"
+        onChange={(e) => onPick(e.target.files)}
+      />
+      {/* 앨범 선택 input */}
+      <input
+        ref={galleryRef}
+        type="file"
+        accept={PHOTO_ACCEPT_ATTR}
         multiple
         className="hidden"
         onChange={(e) => onPick(e.target.files)}
       />
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => fileRef.current?.click()}>
-          사진 추가 (촬영/선택)
+        <Button variant="outline" onClick={() => cameraRef.current?.click()}>
+          사진 촬영
+        </Button>
+        <Button variant="outline" onClick={() => galleryRef.current?.click()}>
+          앨범에서 선택
         </Button>
         {pending.length > 0 && (
           <Button onClick={onUpload} loading={upload.isPending}>

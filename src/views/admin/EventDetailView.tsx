@@ -16,6 +16,7 @@ import { SurveyReportPanel } from '@/components/admin/SurveyReportPanel';
 import { CounselingBuilderPanel } from '@/components/admin/CounselingBuilderPanel';
 import { CounselingReportPanel } from '@/components/admin/CounselingReportPanel';
 import { NotificationLogPanel } from '@/components/admin/NotificationLogPanel';
+import { EventNotificationSettingsPanel } from '@/components/admin/EventNotificationSettingsPanel';
 import { PhotoStatusPanel } from '@/components/admin/PhotoStatusPanel';
 import {
   useAssignableUsers,
@@ -39,6 +40,7 @@ type DetailTab =
   | 'survey'
   | 'survey-report'
   | 'notifications'
+  | 'notification-settings'
   | 'photos';
 
 const TABS: { value: DetailTab; label: string }[] = [
@@ -51,6 +53,7 @@ const TABS: { value: DetailTab; label: string }[] = [
   { value: 'survey', label: '만족도 설정' },
   { value: 'survey-report', label: '만족도 결과' },
   { value: 'notifications', label: '알림 현황' },
+  { value: 'notification-settings', label: '알림 설정' },
   { value: 'photos', label: '사진 현황' },
 ];
 
@@ -237,6 +240,10 @@ export function EventDetailView() {
 
       {activeTab === 'notifications' && (
         <NotificationLogPanel eventId={eventId} timezone={event.timezone} />
+      )}
+
+      {activeTab === 'notification-settings' && (
+        <EventNotificationSettingsPanel eventId={eventId} />
       )}
 
       {activeTab === 'photos' && (
