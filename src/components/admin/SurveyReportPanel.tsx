@@ -256,7 +256,7 @@ export function SurveyReportPanel({
         {/* 응답 현황 */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatBox label="참가 스타트업" value={totalStartups} hint="개사" />
-          <StatBox label="응답 스타트업" value={rate.responded} hint="개사" />
+          <StatBox label="응답 완료" value={rate.responded} hint="개사" />
           <StatBox label="응답 대기" value={Math.max(0, rate.total - rate.responded)} hint="개사" />
           <StatBox
             label="응답률"
