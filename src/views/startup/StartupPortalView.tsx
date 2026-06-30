@@ -3,12 +3,15 @@ import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { FullScreenLoader } from '@/components/common/FullScreenLoader';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
+import { Tabs } from '@/components/common/Tabs';
 import { EventStatusBadge } from '@/components/admin/EventStatusBadge';
 import { MyBookingList } from '@/components/startup/MyBookingList';
 import { BookingSlotsGrid } from '@/components/startup/BookingSlotsGrid';
 import { ChangeBookingModal } from '@/components/startup/ChangeBookingModal';
 import { SatisfactionPanel } from '@/components/startup/SatisfactionPanel';
+import { ExpertSatisfactionPanel } from '@/components/startup/ExpertSatisfactionPanel';
 import { PublicCommentsPanel } from '@/components/startup/PublicCommentsPanel';
+import { ProposalUploadPanel } from '@/components/startup/ProposalUploadPanel';
 import { useAuthStore } from '@/stores/authStore';
 import { formatRange } from '@/lib/datetime';
 import {
@@ -19,6 +22,7 @@ import {
   useEventExperts,
   useEventSlots,
   useEventTableCodes,
+  useExpertAvatars,
   useMyEvents,
 } from '@/hooks/useStartupPortal';
 import type { EventRow } from '@/types/event';
@@ -46,6 +50,10 @@ export function StartupPortalView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const events = useMemo(() => eventsQ.data ?? [], [eventsQ.data]);
+  const tabOptions = useMemo(
+    () => events.map((e) => ({ value: e.id, label: e.title })),
+    [events],
+  );
   const event = useMemo(
     () => events.find((e) => e.id === selectedId) ?? events[0],
     [events, selectedId],
@@ -63,6 +71,8 @@ export function StartupPortalView() {
     [experts],
   );
   const tableCodeById = tablesQ.data ?? new Map<string, string>();
+  const avatarsQ = useExpertAvatars(eventId, experts);
+  const avatarUrls = avatarsQ.data ?? new Map<string, string>();
 
   // 모달 상태
   const [bookTarget, setBookTarget] = useState<MatchingSlotRow | null>(null);
@@ -96,6 +106,10 @@ export function StartupPortalView() {
   const modifiable = canModify(event);
   const bookable = event.status === 'BOOKING';
   const finished = event.status === 'FINISHED';
+  // 만족도 수집 정책(8-D/8-G)에 따라 종료 후 노출 패널을 가른다.
+  const policy = event.satisfaction_policy;
+  const showEventSurvey = policy === 'EVENT_ONLY' || policy === 'BOTH';
+  const showExpertSurvey = policy === 'EXPERT_ONLY' || policy === 'BOTH';
 
   const closeBook = () => {
     setBookTarget(null);
@@ -113,25 +127,11 @@ export function StartupPortalView() {
   return (
     <div className="flex flex-col gap-5">
       {events.length > 1 && (
-        <div className="flex flex-wrap gap-1.5">
-          {events.map((e) => {
-            const active = e.id === event.id;
-            return (
-              <button
-                key={e.id}
-                type="button"
-                onClick={() => setSelectedId(e.id)}
-                className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
-                  active
-                    ? 'border-brand bg-brand text-white'
-                    : 'border-border bg-white text-neutral-base hover:bg-surface'
-                }`}
-              >
-                {e.title}
-              </button>
-            );
-          })}
-        </div>
+        <Tabs
+          value={eventId}
+          options={tabOptions}
+          onChange={setSelectedId}
+        />
       )}
 
       <Card className="flex flex-col gap-2 p-5">
@@ -156,6 +156,9 @@ export function StartupPortalView() {
         <Alert tone="error">일부 데이터를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
       )}
 
+      {/* 8-H: 종료 전 단계에서 본인 IR/소개서 직접 업로드. 사용자 단위(행사 무관) 자료라 항상 노출. */}
+      {!finished && myId && <ProposalUploadPanel userId={myId} timezone={event.timezone} />}
+
       <MyBookingList
         slots={slots}
         expertById={expertById}
@@ -170,13 +173,17 @@ export function StartupPortalView() {
 
       {finished ? (
         <>
-          <SatisfactionPanel eventId={eventId} role="STARTUP" />
+          {showEventSurvey && <SatisfactionPanel eventId={eventId} />}
+          {showExpertSurvey && (
+            <ExpertSatisfactionPanel eventId={eventId} timezone={event.timezone} />
+          )}
           <PublicCommentsPanel eventId={eventId} timezone={event.timezone} />
         </>
       ) : (
         <BookingSlotsGrid
           experts={experts}
           slots={slots}
+          avatarUrls={avatarUrls}
           tableCodeById={tableCodeById}
           myId={myId}
           maxSessions={event.max_sessions_per_startup}

@@ -419,8 +419,5 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 #   - participant-otp-verify : OTP 검증 후 참가자 커스텀 JWT 발급
 # (구 Access Code 함수 participant-login/participant-resend-code 는 OTP 전환으로 제거됨)
 # -----------------------------------------------------------------------------
-[functions.participant-otp-request]
-verify_jwt = false
-
-[functions.participant-otp-verify]
+[functions.participant-login]
 verify_jwt = false

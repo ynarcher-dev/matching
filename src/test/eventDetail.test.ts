@@ -3,6 +3,7 @@ import { eventTableSchema, forceReasonSchema } from '@/schemas/eventDetailSchema
 import {
   buildBookingSchedule,
   computeBookingStats,
+  conflictingSlotIdsForStartup,
   conflictingStartupIds,
   overlaps,
   unbookedStartupIds,
@@ -66,22 +67,33 @@ describe('computeBookingStats', () => {
     slot({ id: 'd', startup_id: 's1', session_status: 'CANCELLED' }), // 취소는 제외
   ];
 
-  it('취소 슬롯을 제외하고 예약율을 계산한다', () => {
-    const stats = computeBookingStats(slots, startupIds);
+  it('취소 슬롯을 제외하고 충족률(예약/목표 수요)을 계산한다', () => {
+    const stats = computeBookingStats(slots, startupIds, 2);
     expect(stats.totalSlots).toBe(3); // a, b, c (d 취소 제외)
     expect(stats.bookedSlots).toBe(2); // a, b
     expect(stats.emptySlots).toBe(1); // c
-    expect(stats.bookingRate).toBeCloseTo(2 / 3);
+    expect(stats.startupCount).toBe(3);
+    expect(stats.requiredSessions).toBe(6); // 3 기업 × 2 회
+    expect(stats.bookingRate).toBeCloseTo(2 / 6); // 슬롯(공급)이 아닌 목표 수요로 나눈다
+  });
+
+  it('잔여 세션(공급 − 수요)을 부호 있는 값으로 계산한다', () => {
+    const short = computeBookingStats(slots, startupIds, 2);
+    expect(short.slotBalance).toBe(-3); // 공급 3 − 수요 6 → 음수(슬롯 추가 필요)
+
+    const exact = computeBookingStats(slots, startupIds, 1);
+    expect(exact.requiredSessions).toBe(3); // 3 기업 × 1 회
+    expect(exact.slotBalance).toBe(0); // 공급 3 = 수요 3
   });
 
   it('예약/미예약 스타트업 수를 센다', () => {
-    const stats = computeBookingStats(slots, startupIds);
+    const stats = computeBookingStats(slots, startupIds, 2);
     expect(stats.bookedStartupCount).toBe(2); // s1, s2
     expect(stats.unbookedStartupCount).toBe(1); // s3
   });
 
-  it('슬롯이 없으면 예약율 0', () => {
-    expect(computeBookingStats([], startupIds).bookingRate).toBe(0);
+  it('참가 기업이 없으면(수요 0) 충족률 0', () => {
+    expect(computeBookingStats(slots, [], 2).bookingRate).toBe(0);
   });
 });
 
@@ -137,6 +149,61 @@ describe('conflictingStartupIds', () => {
   });
 });
 
+describe('conflictingSlotIdsForStartup', () => {
+  it('스타트업의 기존 예약과 겹치는 빈 슬롯만 집합으로 반환', () => {
+    const all: MatchingSlotRow[] = [
+      // s1 의 기존 예약 01:00~01:40
+      slot({
+        id: 'booked',
+        startup_id: 's1',
+        booking_type: 'MANUAL',
+        start_time: '2026-07-10T01:00:00.000Z',
+        end_time: '2026-07-10T01:40:00.000Z',
+      }),
+      // 겹치는 빈 슬롯
+      slot({
+        id: 'empty-conflict',
+        start_time: '2026-07-10T01:20:00.000Z',
+        end_time: '2026-07-10T02:00:00.000Z',
+      }),
+      // 겹치지 않는 빈 슬롯
+      slot({
+        id: 'empty-free',
+        start_time: '2026-07-10T03:00:00.000Z',
+        end_time: '2026-07-10T03:40:00.000Z',
+      }),
+    ];
+    const conflicts = conflictingSlotIdsForStartup(all, 's1');
+    expect(conflicts.has('empty-conflict')).toBe(true);
+    expect(conflicts.has('empty-free')).toBe(false);
+    // 예약된 슬롯 자신은 빈 슬롯이 아니므로 후보에서 제외.
+    expect(conflicts.has('booked')).toBe(false);
+  });
+
+  it('취소된 기존 예약은 충돌로 보지 않는다', () => {
+    const all: MatchingSlotRow[] = [
+      slot({
+        id: 'cancelled',
+        startup_id: 's1',
+        session_status: 'CANCELLED',
+        start_time: '2026-07-10T01:00:00.000Z',
+        end_time: '2026-07-10T01:40:00.000Z',
+      }),
+      slot({
+        id: 'empty',
+        start_time: '2026-07-10T01:20:00.000Z',
+        end_time: '2026-07-10T02:00:00.000Z',
+      }),
+    ];
+    expect(conflictingSlotIdsForStartup(all, 's1').size).toBe(0);
+  });
+
+  it('기존 예약이 없으면 빈 집합', () => {
+    const all: MatchingSlotRow[] = [slot({ id: 'empty' })];
+    expect(conflictingSlotIdsForStartup(all, 's1').size).toBe(0);
+  });
+});
+
 describe('participantLabel', () => {
   const startup: AssignableUser = {
     id: 's',
@@ -144,8 +211,18 @@ describe('participantLabel', () => {
     role: 'STARTUP',
     company_name: '가나다랩',
     representative_name: '김대표',
+    contact_name: null,
+    company_homepage: null,
     expert_organization: null,
     expert_position: null,
+    email: null,
+    phone_number: null,
+    company_description: null,
+    expert_description: null,
+    field_ids: [],
+    proposal_file_url: null,
+    last_login_at: null,
+    created_at: '',
   };
   const expert: AssignableUser = {
     id: 'e',
@@ -153,8 +230,18 @@ describe('participantLabel', () => {
     role: 'EXPERT',
     company_name: null,
     representative_name: null,
+    contact_name: null,
+    company_homepage: null,
     expert_organization: '벤처협회',
     expert_position: '위원',
+    email: null,
+    phone_number: null,
+    company_description: null,
+    expert_description: null,
+    field_ids: [],
+    proposal_file_url: null,
+    last_login_at: null,
+    created_at: '',
   };
 
   it('스타트업은 기업명·대표명을 조합한다', () => {

@@ -42,11 +42,24 @@ export function responseRate(total: number, responded: number): ResponseRate {
   return { responded, total, pct };
 }
 
+/** 문항 유형 → 집계 종류(평점/선택형/주관식). 결과 리포트의 유형 필터·그룹화 공용. */
+export function questionKind(questionType: SurveyQuestion['question_type']): QuestionAgg['kind'] {
+  if (questionType === 'RATING') return 'RATING';
+  if (questionType === 'SINGLE_CHOICE' || questionType === 'MULTIPLE_CHOICE') return 'CHOICE';
+  return 'TEXT';
+}
+
+/** 결과 리포트 상단 유형 필터 칩(평점/선택형/주관식). */
+export type QuestionKindFilter = 'ALL' | QuestionAgg['kind'];
+export const QUESTION_KIND_FILTERS: ReadonlyArray<{ value: QuestionKindFilter; label: string }> = [
+  { value: 'ALL', label: '전체' },
+  { value: 'RATING', label: '평점' },
+  { value: 'CHOICE', label: '선택형' },
+  { value: 'TEXT', label: '주관식' },
+];
+
 /** 한 문항의 답변들을 유형에 맞게 집계. */
-export function aggregateQuestion(
-  q: SurveyQuestion,
-  answers: SurveyAnswerRow[],
-): QuestionAgg {
+export function aggregateQuestion(q: SurveyQuestion, answers: SurveyAnswerRow[]): QuestionAgg {
   if (q.question_type === 'RATING') {
     const distribution = [0, 0, 0, 0, 0];
     let sum = 0;
@@ -92,9 +105,7 @@ export function aggregateQuestion(
   }
 
   // SHORT_ANSWER / LONG_ANSWER
-  const texts = answers
-    .map((a) => (a.answer_text ?? '').trim())
-    .filter((t) => t.length > 0);
+  const texts = answers.map((a) => (a.answer_text ?? '').trim()).filter((t) => t.length > 0);
   return { kind: 'TEXT', answers: texts };
 }
 

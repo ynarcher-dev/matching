@@ -222,7 +222,7 @@ export function EventNotificationSettingsPanel({ eventId }: Props) {
           <section className="rounded-lg border border-border bg-surface/40 p-3 text-xs">
             <p className="font-semibold text-neutral-base/70 mb-1">현재 발송 가능 여부 미리보기</p>
             {gatePreview.enabled ? (
-              <p className="text-emerald-700">✓ 예약 확정 알림 발송 가능 상태입니다.</p>
+              <p className="text-success">✓ 예약 확정 알림 발송 가능 상태입니다.</p>
             ) : (
               <p className="text-brand">
                 ✕ 차단 사유:{' '}

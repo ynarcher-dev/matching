@@ -14,10 +14,11 @@ import {
   useDeleteQuestion,
   useEventSurveyQuestions,
   useEventSurveyResponseCount,
-  useSwapQuestionOrder,
+  useReorderQuestions,
   useUpdateQuestion,
 } from '@/hooks/useSurveyBuilder';
 import {
+  defaultExpertTemplate,
   defaultTemplate,
   editLockReason,
   needsOptions,
@@ -30,19 +31,16 @@ import type {
   SurveyQuestion,
   SurveyQuestionInput,
   SurveyQuestionType,
+  SurveyScope,
   SurveyTargetRole,
 } from '@/types/satisfaction';
 import type { EventStatus } from '@/types/event';
-
-const ROLE_TABS: { value: SurveyTargetRole; label: string }[] = [
-  { value: 'STARTUP', label: '스타트업용' },
-  { value: 'EXPERT', label: '전문가용' },
-];
 
 /** 문항 편집 모달 — 신규/수정 공용. 저장 시 검증 후 SurveyQuestionInput 을 돌려준다. */
 function QuestionEditorModal({
   open,
   initial,
+  scope,
   role,
   orderNo,
   onClose,
@@ -52,6 +50,7 @@ function QuestionEditorModal({
 }: {
   open: boolean;
   initial: SurveyQuestion | null;
+  scope: SurveyScope;
   role: SurveyTargetRole;
   orderNo: number;
   onClose: () => void;
@@ -93,6 +92,7 @@ function QuestionEditorModal({
       return;
     }
     onSave({
+      survey_scope: scope,
       target_role: role,
       question_type: parsed.data.question_type,
       title: parsed.data.title,
@@ -166,15 +166,17 @@ function QuestionEditorModal({
                   placeholder={`선택지 ${idx + 1}`}
                   className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
                 />
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="md"
                   onClick={() => setOptions((prev) => prev.filter((_, i) => i !== idx))}
                   disabled={options.length <= 1}
                   aria-label={`선택지 ${idx + 1} 삭제`}
-                  className="shrink-0 rounded-lg border border-border px-3 py-2 text-sm text-neutral-base/70 transition-colors hover:bg-surface disabled:opacity-40"
+                  className="shrink-0 text-neutral-base/70"
                 >
                   −
-                </button>
+                </Button>
               </div>
             ))}
             <Button variant="outline" onClick={() => setOptions((prev) => [...prev, ''])}>
@@ -192,89 +194,123 @@ function QuestionEditorModal({
   );
 }
 
-/** 문항 한 개 카드(목록 행). */
-function QuestionCard({
-  q,
-  index,
-  total,
+/**
+ * 드래그앤드롭으로 순서를 바꿀 수 있는 문항 목록(간소화된 한 줄 카드).
+ * 네이티브 HTML5 DnD 사용 — 별도 라이브러리 의존성 없음.
+ */
+function SortableQuestionList({
+  questions,
   editable,
-  onMove,
   onEdit,
   onDelete,
+  onReorder,
 }: {
-  q: SurveyQuestion;
-  index: number;
-  total: number;
+  questions: SurveyQuestion[];
   editable: boolean;
-  onMove: (dir: -1 | 1) => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit: (q: SurveyQuestion) => void;
+  onDelete: (q: SurveyQuestion) => void;
+  onReorder: (orderedIds: string[]) => void;
 }) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+
+  const reset = () => {
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+
+  const handleDrop = () => {
+    if (dragIndex !== null && overIndex !== null && dragIndex !== overIndex) {
+      const reordered = [...questions];
+      const [moved] = reordered.splice(dragIndex, 1);
+      reordered.splice(overIndex, 0, moved);
+      onReorder(reordered.map((q) => q.id));
+    }
+    reset();
+  };
+
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-border p-4">
-      <div className="flex flex-col items-center gap-1 pt-0.5">
-        <button
-          type="button"
-          onClick={() => onMove(-1)}
-          disabled={!editable || index === 0}
-          aria-label="위로 이동"
-          className="rounded border border-border px-1.5 text-xs text-neutral-base/70 transition-colors hover:bg-surface disabled:opacity-30"
-        >
-          ▲
-        </button>
-        <button
-          type="button"
-          onClick={() => onMove(1)}
-          disabled={!editable || index === total - 1}
-          aria-label="아래로 이동"
-          className="rounded border border-border px-1.5 text-xs text-neutral-base/70 transition-colors hover:bg-surface disabled:opacity-30"
-        >
-          ▼
-        </button>
-      </div>
-
-      <div className="flex flex-1 flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-neutral-base/70">
-            {QUESTION_TYPE_LABEL[q.question_type]}
-          </span>
-          {q.is_required && (
-            <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand">
-              필수
-            </span>
-          )}
-        </div>
-        <span className="text-sm font-bold text-neutral-base">{q.title}</span>
-        {q.description && <span className="text-xs text-neutral-base/60">{q.description}</span>}
-        {q.options && q.options.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {q.options.map((o, i) => (
-              <span key={i} className="rounded border border-border px-2 py-0.5 text-xs text-neutral-base/80">
-                {o}
+    <div className="flex flex-col gap-1.5">
+      {questions.map((q, idx) => {
+        const isDragging = dragIndex === idx;
+        const isOver = overIndex === idx && dragIndex !== null && dragIndex !== idx;
+        const optionCount = q.options?.length ?? 0;
+        return (
+          <div
+            key={q.id}
+            draggable={editable}
+            onDragStart={(e) => {
+              setDragIndex(idx);
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragOver={(e) => {
+              if (dragIndex === null) return;
+              e.preventDefault();
+              if (overIndex !== idx) setOverIndex(idx);
+            }}
+            onDragEnd={reset}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleDrop();
+            }}
+            className={`group flex items-center gap-2.5 rounded-lg border bg-white px-3 py-2.5 transition-colors ${
+              isDragging
+                ? 'border-brand opacity-50'
+                : isOver
+                  ? 'border-brand bg-brand/5'
+                  : 'border-border'
+            }`}
+          >
+            {editable && (
+              <span
+                aria-hidden
+                title="드래그하여 순서 변경"
+                className="shrink-0 cursor-grab select-none text-neutral-base/30 transition-colors hover:text-neutral-base/60 active:cursor-grabbing"
+              >
+                ⠿
               </span>
-            ))}
-          </div>
-        )}
-      </div>
+            )}
 
-      {editable && (
-        <div className="flex shrink-0 gap-1.5">
-          <button
-            type="button"
-            onClick={onEdit}
-            className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-neutral-base transition-colors hover:bg-surface"
-          >
-            수정
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-brand transition-colors hover:bg-brand/5"
-          >
-            삭제
-          </button>
-        </div>
-      )}
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="flex items-center gap-1">
+                <span className="truncate text-sm font-bold text-neutral-base">{q.title}</span>
+                {q.is_required && (
+                  <span className="shrink-0 text-sm font-bold text-brand" title="필수 응답">
+                    *
+                  </span>
+                )}
+              </div>
+              <span className="truncate text-xs text-neutral-base/50">
+                {QUESTION_TYPE_LABEL[q.question_type]}
+                {optionCount > 0 && ` · 선택지 ${optionCount}개`}
+              </span>
+            </div>
+
+            {editable && (
+              <div className="ml-3 flex shrink-0 items-center gap-1.5 text-xs font-semibold">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEdit(q)}
+                  className="text-neutral-base/80"
+                >
+                  수정
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDelete(q)}
+                  className="text-brand"
+                >
+                  삭제
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -287,32 +323,47 @@ function QuestionCard({
 export function SurveyBuilderPanel({
   eventId,
   status,
+  embedded = false,
+  scope = 'EVENT',
 }: {
   eventId: string;
   status: EventStatus;
+  /** 설정 모달 안에 넣을 때(8-F): 외곽 Card·자체 제목을 생략한다. */
+  embedded?: boolean;
+  /** EVENT=행사 만족도(역할 탭) / EXPERT=전문가 만족도(스타트업 단일, 8-G). */
+  scope?: SurveyScope;
 }) {
+  const isExpertScope = scope === 'EXPERT';
   const questionsQ = useEventSurveyQuestions(eventId);
-  const countQ = useEventSurveyResponseCount(eventId);
+  const countQ = useEventSurveyResponseCount(eventId, scope);
 
   const createM = useCreateQuestion(eventId);
   const updateM = useUpdateQuestion(eventId);
   const deleteM = useDeleteQuestion(eventId);
-  const swapM = useSwapQuestionOrder(eventId);
+  const reorderM = useReorderQuestions(eventId);
   const templateM = useAddTemplateQuestions(eventId);
 
-  const [role, setRole] = useState<SurveyTargetRole>('STARTUP');
+  // 행사·전문가 만족도 모두 스타트업만 응답하므로 대상 역할은 STARTUP 고정(역할 탭 없음).
+  const activeRole: SurveyTargetRole = 'STARTUP';
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<SurveyQuestion | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SurveyQuestion | null>(null);
 
-  const questions = useMemo(() => questionsQ.data ?? [], [questionsQ.data]);
+  // 이 빌더가 다루는 스코프의 문항만.
+  const questions = useMemo(
+    () => (questionsQ.data ?? []).filter((q) => q.survey_scope === scope),
+    [questionsQ.data, scope],
+  );
   const responseCount = countQ.data ?? 0;
   const lockReason = editLockReason(status, responseCount);
   const editable = lockReason === null;
 
   const roleQuestions = useMemo(
-    () => questions.filter((q) => q.target_role === role).sort((a, b) => a.order_no - b.order_no),
-    [questions, role],
+    () =>
+      questions
+        .filter((q) => q.target_role === activeRole)
+        .sort((a, b) => a.order_no - b.order_no),
+    [questions, activeRole],
   );
 
   const saveError = createM.isError
@@ -344,64 +395,50 @@ export function SurveyBuilderPanel({
     }
   };
 
-  const handleMove = (idx: number, dir: -1 | 1) => {
-    const target = roleQuestions[idx + dir];
-    const current = roleQuestions[idx];
-    if (!target || !current) return;
-    swapM.mutate([
-      { id: current.id, order_no: current.order_no },
-      { id: target.id, order_no: target.order_no },
-    ]);
+  // 드래그앤드롭 결과(새 id 순서)를 기존 order_no 값 집합에 재배치해 변경분만 저장한다.
+  const handleReorder = (orderedIds: string[]) => {
+    const orderNos = roleQuestions.map((q) => q.order_no); // 이미 order_no 오름차순
+    const byId = new Map(roleQuestions.map((q) => [q.id, q]));
+    const updates = orderedIds
+      .map((id, i) => ({ id, order_no: orderNos[i] }))
+      .filter((u) => byId.get(u.id)?.order_no !== u.order_no);
+    if (updates.length > 0) reorderM.mutate(updates);
   };
 
   if (questionsQ.isLoading || countQ.isLoading) {
-    return (
-      <Card className="flex items-center justify-center p-8">
-        <Spinner className="h-5 w-5" />
-      </Card>
+    const spinner = <Spinner className="h-5 w-5" />;
+    return embedded ? (
+      <div className="flex items-center justify-center p-8">{spinner}</div>
+    ) : (
+      <Card className="flex items-center justify-center p-8">{spinner}</Card>
     );
   }
 
+  const Root = embedded ? 'div' : Card;
   return (
-    <Card className="flex flex-col gap-4 p-5">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-base font-bold text-neutral-base">만족도 조사 설정</h2>
-        <p className="text-sm text-neutral-base/70">
-          참가자 유형별로 행사 종료 후 받을 만족도 문항을 구성합니다.
-        </p>
-      </div>
+    <Root className="flex flex-col gap-4 p-5">
+      {!embedded && (
+        <div className="flex flex-col gap-1">
+          <h2 className="text-base font-bold text-neutral-base">
+            {isExpertScope ? '전문가 만족도 설정' : '만족도 조사 설정'}
+          </h2>
+          <p className="text-sm text-neutral-base/70">
+            {isExpertScope
+              ? '스타트업이 상담한 전문가/세션마다 응답할 문항을 구성합니다.'
+              : '참가자 유형별로 행사 종료 후 받을 만족도 문항을 구성합니다.'}
+          </p>
+        </div>
+      )}
 
       {lockReason && <Alert tone="info">{lockReason}</Alert>}
       {(questionsQ.isError || countQ.isError) && (
         <Alert tone="error">설문 정보를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
       )}
-      {swapM.isError && <Alert tone="error">순서를 변경하지 못했습니다. 다시 시도해 주세요.</Alert>}
+      {reorderM.isError && <Alert tone="error">순서를 변경하지 못했습니다. 다시 시도해 주세요.</Alert>}
       {deleteM.isError && <Alert tone="error">{(deleteM.error as Error).message}</Alert>}
       {templateM.isError && <Alert tone="error">{(templateM.error as Error).message}</Alert>}
 
-      {/* 역할 탭 */}
-      <div className="flex gap-1.5">
-        {ROLE_TABS.map((t) => {
-          const active = role === t.value;
-          const count = questions.filter((q) => q.target_role === t.value).length;
-          return (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => setRole(t.value)}
-              className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
-                active
-                  ? 'border-brand bg-brand text-white'
-                  : 'border-border bg-white text-neutral-base hover:bg-surface'
-              }`}
-            >
-              {t.label} ({count})
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 문항 목록 */}
+      {/* 문항 목록 (행사·전문가 만족도 모두 스타트업 단일 대상) */}
       {roleQuestions.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border px-3 py-8">
           <p className="text-sm text-neutral-base/60">등록된 문항이 없습니다.</p>
@@ -409,27 +446,22 @@ export function SurveyBuilderPanel({
             <Button
               variant="outline"
               loading={templateM.isPending}
-              onClick={() => templateM.mutate(defaultTemplate(role))}
+              onClick={() =>
+                templateM.mutate(isExpertScope ? defaultExpertTemplate() : defaultTemplate('STARTUP'))
+              }
             >
               기본 문항 불러오기
             </Button>
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          {roleQuestions.map((q, idx) => (
-            <QuestionCard
-              key={q.id}
-              q={q}
-              index={idx}
-              total={roleQuestions.length}
-              editable={editable && !swapM.isPending}
-              onMove={(dir) => handleMove(idx, dir)}
-              onEdit={() => openEdit(q)}
-              onDelete={() => setDeleteTarget(q)}
-            />
-          ))}
-        </div>
+        <SortableQuestionList
+          questions={roleQuestions}
+          editable={editable}
+          onEdit={openEdit}
+          onDelete={setDeleteTarget}
+          onReorder={handleReorder}
+        />
       )}
 
       {editable && (
@@ -442,8 +474,9 @@ export function SurveyBuilderPanel({
         key={editing?.id ?? 'new'}
         open={editorOpen}
         initial={editing}
-        role={role}
-        orderNo={editing ? editing.order_no : nextOrderNo(questions, role)}
+        scope={scope}
+        role={activeRole}
+        orderNo={editing ? editing.order_no : nextOrderNo(questions, activeRole, scope)}
         onClose={closeEditor}
         onSave={handleSave}
         loading={createM.isPending || updateM.isPending}
@@ -472,6 +505,6 @@ export function SurveyBuilderPanel({
           deleteM.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) });
         }}
       />
-    </Card>
+    </Root>
   );
 }

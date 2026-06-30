@@ -44,63 +44,48 @@ canDispatchExternally(globalSettings, eventNotificationSettings, eventType, prov
 }
 ```
 
-## 3. 관리자 UI 범위
+## 3. 관리자 UI 범위 (Notification Admin UI)
 
-### 3.1 전역 알림 설정
+### 3.1 전역 안내발송 관리 (`NotificationSettingsView.tsx`)
+- **라우트**: `/admin/settings` (메뉴명: `안내발송 관리` - 최고관리자 전용 접근 가능)
+- **화면 목적**: 시스템 전체의 전역 발송 허용 상태 및 공급사 연동 설정을 제어합니다.
+- **주요 UI 구성 요소**:
+  - **현재 발송 모드 배지**: 전역 설정값과 발신번호 정합성을 바탕으로 현재 발송 상태를 동적으로 판정하여 배지로 노출합니다.
+    - `FREE_OPERATION` (무료 운영): 실제 발송 토글 OFF 상태이며, 외부 API를 호출하지 않고 수동 안내 및 현장 1회용 링크를 사용합니다.
+    - `MOCK` (모킹 모드): Mock 공급사가 선택되어 실제 메시지 발송 없이 DB 발송 큐 로그만 생성합니다.
+    - `LIVE` (실제 발송): Solapi 공급사가 설정되어 실제 SMS/알림톡 발송 및 요금 청구가 발생합니다.
+    - `INCOMPLETE` (설정 불완전): Solapi를 선택했으나 발신번호(`sender_phone`)를 미지정한 상태입니다.
+  - **발송 설정 폼 (`globalNotificationSettingsSchema`)**:
+    - `실제 발송 활성화` 토글 스위치 (`dispatch_enabled`).
+    - 공급사 라디오 선택: `MOCK` (Mock 발송 어댑터) 또는 `SOLAPI` (솔라피 API 연동 어댑터).
+    - `발신번호` 입력 필드: Solapi에 사전 등록된 발송 번호(숫자만 입력).
+    - *보안*: Solapi API 키와 Secret 정보는 화면에 노출되지 않도록 DB 저장을 배제하고 Supabase Edge Function 환경변수(`SOLAPI_API_KEY`, `SOLAPI_API_SECRET` 등)로 은폐 관리합니다.
+  - **테스트 발송 카드 (`useTestNotification`)**:
+    - 임의의 수신인 휴대전화 번호를 입력해 즉시 테스트 발송을 수행하는 영역.
+    - 전역 발송 활성화 여부(`dispatch_enabled = false`)와 무관하게 공급사 키 및 발신번호 설정의 유효성을 실시간으로 확인하는 도구로 활용됩니다.
+    - 테스트 발송 성공/실패 여부 및 최종 테스트 시각(`last_tested_at`)을 이력으로 관리 및 갱신합니다.
 
-위치 후보:
+### 3.2 행사별 행사알림 설정 (`EventNotificationSettingsPanel.tsx`)
+- **위치**: 행사 상세 페이지 `/admin/events/:eventId` 내의 **"행사알림"** 탭.
+- **주요 UI 구성 요소**:
+  - **알림 채널 정책 라디오 그룹**:
+    - `발송 안 함` (기본값)
+    - `카카오 알림톡만`
+    - `SMS만`
+    - `카카오 알림톡 + SMS fallback` (알림톡 전송 실패 시 SMS로 자동 교체 발송)
+  - **이벤트별 발송 ON/OFF 토글**:
+    - 예약 시작 안내 (`send_booking_open`)
+    - 예약 생성 안내 (`send_booking_created`)
+    - 예약 변경 안내 (`send_booking_changed`)
+    - 예약 취소 안내 (`send_booking_cancelled`)
+    - 미예약 스타트업 리마인드 (`send_unbooked_reminder`)
+    - 행사 전 리마인드 (`send_event_reminder`)
+  - **발송 게이트웨이 판정 정보**:
+    - 전역 설정 상태 및 현재 행사의 알림 정책, 필수 키 세팅 정합성을 교차 검증하여 실제 외부 API 발송이 이루어질 수 있는지에 대한 가능 여부와 구체적 차단 사유를 안내 배너로 실시간 표시합니다.
+  - **알림 이력 목록 (`NotificationLogPanel`)**:
+    - 해당 행사에서 발생한 알림 발송 큐 목록(수신인, 발송 내용, 채널, 상태 배지: `PENDING`, `SENT`, `FAILED`, `SKIPPED`, 시각)을 공통 `DataTable` 형태로 목록화하여 조회 및 감시 기능을 제공합니다.
 
-```text
-/admin/settings/notifications
-```
-
-또는 기존 관리자 설정 영역이 없다면 행사 상세의 알림 탭 안에서 "전역 설정 상태"를 읽기 전용으로 먼저 노출한다.
-
-필수 UI:
-
-- `실제 발송 활성화` 토글
-- 공급사 선택: `Mock`, `Solapi`
-- 공급사 설정 상태: API 키, API Secret, 발신번호, dispatch secret, 템플릿 묶음
-- 테스트 발송 버튼
-- 마지막 테스트 발송 결과
-- 현재 모드 배지: `무료 운영`, `Mock`, `실발송 가능`, `설정 불완전`
-
-주의:
-
-- API Secret 원문은 일반 화면에 노출하지 않는다.
-- 환경변수 기반 설정이면 관리자 UI에는 설정 여부만 표시한다.
-- 토글 ON 전에 테스트 발송 성공 또는 명시 확인 절차를 둔다.
-
-### 3.2 행사별 알림 설정
-
-위치 후보:
-
-```text
-/admin/events/:eventId
-```
-
-행사 상세에 `알림 설정` 탭 또는 기존 알림 현황 탭의 설정 섹션으로 둔다.
-
-필수 UI:
-
-- 알림 채널 정책
-  - `발송 안 함` (기본)
-  - `카카오 알림톡만`
-  - `SMS만`
-  - `카카오 알림톡 + SMS fallback`
-- 이벤트별 ON/OFF 토글
-  - 예약 시작 안내
-  - 예약 생성 안내
-  - 예약 변경 안내
-  - 예약 취소 안내
-  - 미예약 스타트업 리마인드
-  - 행사 전 리마인드
-- 사용할 템플릿 묶음 선택
-- 현재 발송 가능 여부와 차단 사유 표시
-- 테스트 발송 또는 미리보기
-
-행사별 기본값:
-
+행사별 알림 설정 기본값:
 ```text
 notification_policy = NONE
 send_booking_open = false

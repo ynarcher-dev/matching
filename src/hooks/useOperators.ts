@@ -29,6 +29,52 @@ interface EventOperatorRoleEmbed {
   events: { title: string } | null;
 }
 
+/** 한 행사에 배정된 운영자 1건(행사 기준 배정 모달, 8-D). */
+export interface EventOperatorAssignment {
+  id: string;
+  user_id: string;
+  permission: EventOperatorRole['permission'];
+  created_at: string;
+  operator_name: string;
+  operator_email: string;
+}
+
+interface EventOperatorAssignmentEmbed {
+  id: string;
+  user_id: string;
+  permission: EventOperatorRole['permission'];
+  created_at: string;
+  users: { name: string; email: string | null } | null;
+}
+
+/**
+ * 특정 행사에 배정된 활성 운영자 목록 (8-D, 행사 상세 운영자 배정 모달).
+ * 최고관리자 RLS 로 전체 조회. useEventOperatorRoles 의 행사 기준 역방향.
+ */
+export function useEventOperators(eventId: string | null) {
+  return useQuery<EventOperatorAssignment[]>({
+    queryKey: ['event-operators-by-event', eventId],
+    enabled: Boolean(eventId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('event_operator_roles')
+        .select('id,user_id,permission,created_at,users(name,email)')
+        .eq('event_id', eventId as string)
+        .is('revoked_at', null)
+        .returns<EventOperatorAssignmentEmbed[]>();
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((r) => ({
+        id: r.id,
+        user_id: r.user_id,
+        permission: r.permission,
+        created_at: r.created_at,
+        operator_name: r.users?.name ?? '(삭제된 계정)',
+        operator_email: r.users?.email ?? '',
+      }));
+    },
+  });
+}
+
 /** 특정 운영자의 활성 행사 권한 목록(최고관리자 RLS 로 전체 조회). */
 export function useEventOperatorRoles(userId: string | null) {
   return useQuery<EventOperatorRole[]>({

@@ -15,6 +15,8 @@ export interface PortalExpert {
   defaultTableId: string | null;
   /** 전문가의 관심/전문 분야명(user_fields → fields.name, 최대 3개). */
   fieldNames: string[];
+  /** 프로필 사진 객체 경로(`avatars/...`). 미등록이면 null. 표시는 단기 Signed URL. */
+  profileImageUrl: string | null;
 }
 
 /** 내 예약 1건(카드 표시용 — 슬롯 + 전문가 + 적용 테이블 코드). */

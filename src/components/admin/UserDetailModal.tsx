@@ -6,19 +6,39 @@ import { Button } from '@/components/common/Button';
 import { TextField } from '@/components/common/TextField';
 import { SelectField } from '@/components/common/SelectField';
 import { Alert } from '@/components/common/Alert';
-import { FieldMultiSelect } from '@/components/admin/FieldMultiSelect';
+import { FieldTagInput } from '@/components/admin/FieldTagInput';
 import { ParticipantFileInput } from '@/components/admin/ParticipantFileInput';
+import { ProposalHistoryTimeline } from '@/components/admin/ProposalHistoryTimeline';
 import { participantFormSchema } from '@/schemas/userSchemas';
 import type { ParticipantFormValues } from '@/schemas/userSchemas';
 import { useSaveParticipant } from '@/hooks/useUserMutations';
 import { PARTICIPANT_ROLE_LABELS } from '@/lib/labels';
-import type { ParticipantRole, ParticipantWithAuth } from '@/types/user';
+import type { ParticipantRole } from '@/types/user';
+
+export interface EditableParticipant {
+  id: string;
+  role: ParticipantRole;
+  name: string;
+  email: string;
+  phone_number: string | null;
+  company_name: string | null;
+  representative_name: string | null;
+  contact_name: string | null;
+  company_homepage: string | null;
+  company_description: string | null;
+  expert_organization: string | null;
+  expert_position: string | null;
+  expert_description: string | null;
+  proposal_file_url: string | null;
+  profile_image_url: string | null;
+  field_ids: string[];
+}
 
 interface UserDetailModalProps {
   open: boolean;
   onClose: () => void;
   /** 지정 시 편집 모드, 미지정 시 신규 등록 모드. */
-  user?: ParticipantWithAuth | null;
+  user?: EditableParticipant | null;
   /** 신규 등록 시 기본 역할(활성 탭). */
   defaultRole: ParticipantRole;
 }
@@ -29,7 +49,7 @@ const ROLE_OPTIONS = [
 ];
 
 function buildDefaults(
-  user: ParticipantWithAuth | null | undefined,
+  user: EditableParticipant | null | undefined,
   defaultRole: ParticipantRole,
 ): ParticipantFormValues {
   return {
@@ -199,20 +219,27 @@ export function UserDetailModal({ open, onClose, user, defaultRole }: UserDetail
           </fieldset>
         )}
 
-        <FieldMultiSelect
+        <FieldTagInput
           value={fieldIds ?? []}
           onChange={(next) => setValue('field_ids', next, { shouldValidate: true })}
           error={errors.field_ids?.message}
         />
 
-        <ParticipantFileInput
-          role={role}
-          currentPath={currentFilePath}
-          file={file}
-          onFileChange={setFile}
-          removeRequested={removeFile}
-          onRemoveChange={setRemoveFile}
-        />
+        {/* 첨부는 스타트업 소개서만 받는다(전문가 프로필 사진 업로드는 미사용). */}
+        {role === 'STARTUP' && (
+          <ParticipantFileInput
+            role={role}
+            currentPath={currentFilePath}
+            userId={user?.id ?? null}
+            file={file}
+            onFileChange={setFile}
+            removeRequested={removeFile}
+            onRemoveChange={setRemoveFile}
+          />
+        )}
+
+        {/* 소개서 변경 이력 타임라인(편집 중인 기존 스타트업 한정). */}
+        {isEdit && role === 'STARTUP' && user && <ProposalHistoryTimeline userId={user.id} />}
       </form>
     </Modal>
   );

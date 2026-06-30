@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Badge } from '@/components/common/Badge';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { formatRange } from '@/lib/datetime';
@@ -51,9 +52,9 @@ export function MyBookingList({
     <Card className="flex flex-col gap-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-bold text-neutral-base">나의 매칭 예약</h2>
-        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-700">
+        <Badge tone="success">
           예약 현황: {mine.length}회 / 최대 {maxSessions}회
-        </span>
+        </Badge>
       </div>
 
       {mine.length === 0 ? (

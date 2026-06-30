@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { localInputToIso } from '@/lib/datetime';
 import { eventKeys } from '@/hooks/useEvents';
+import { eventDetailKeys } from '@/hooks/useEventDetail';
 import type { EventFormValues } from '@/schemas/eventSchemas';
 import type { EventRow } from '@/types/event';
 
@@ -14,6 +15,7 @@ function toEventColumns(values: EventFormValues) {
     timezone,
     allow_startup_self_booking: values.allow_startup_self_booking,
     allow_duplicate_expert: values.allow_duplicate_expert,
+    satisfaction_policy: values.satisfaction_policy,
     booking_start: localInputToIso(values.booking_start, timezone),
     booking_end: localInputToIso(values.booking_end, timezone),
     event_start: localInputToIso(values.event_start, timezone),
@@ -52,7 +54,11 @@ export function useUpdateEvent() {
         .eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: eventKeys.all }),
+    // 목록(eventKeys)과 상세 헤더(eventDetailKeys)는 키 네임스페이스가 달라 둘 다 무효화한다.
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: eventKeys.all });
+      qc.invalidateQueries({ queryKey: eventDetailKeys.root(id) });
+    },
   });
 }
 

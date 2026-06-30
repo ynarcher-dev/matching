@@ -1,40 +1,37 @@
 import { useMemo, useState } from 'react';
+import { Badge } from '@/components/common/Badge';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { Button } from '@/components/common/Button';
 import { Spinner } from '@/components/common/Spinner';
+import { StatBox } from '@/components/common/StatBox';
+import { FilterBar, SearchInput, FilterChips } from '@/components/common/FilterBar';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useEventSurveyQuestions } from '@/hooks/useSurveyBuilder';
 import { useSurveyReport } from '@/hooks/useSurveyReport';
 import {
   aggregateQuestion,
   answerToDisplay,
+  questionKind,
   responseRate,
   toCsv,
+  QUESTION_KIND_FILTERS,
   type QuestionAgg,
+  type QuestionKindFilter,
 } from '@/lib/surveyReport';
 import { barWidthClass } from '@/lib/percentBar';
 import { QUESTION_TYPE_LABEL, RATING_SCALE } from '@/lib/satisfaction';
-import { PARTICIPANT_ROLE_LABELS } from '@/lib/labels';
 import { formatDateTime } from '@/lib/datetime';
-import type {
-  SurveyAnswerRow,
-  SurveyQuestion,
-  SurveyTargetRole,
-} from '@/types/satisfaction';
+import type { SurveyAnswerRow, SurveyQuestion } from '@/types/satisfaction';
 import type { AssignableUser, EventParticipantRow } from '@/types/eventDetail';
-
-const ROLE_TABS: { value: Exclude<SurveyTargetRole, 'ALL'>; label: string }[] = [
-  { value: 'STARTUP', label: '스타트업' },
-  { value: 'EXPERT', label: '전문가' },
-];
 
 /** 가로 막대 + 수치(평점 분포·객관식 비율 공용). */
 function StatBar({ label, count, pct }: { label: string; count: number; pct: number }) {
   return (
     <div className="flex items-center gap-2">
       <span className="w-24 shrink-0 truncate text-xs text-neutral-base/80">{label}</span>
-      <div className="h-3 flex-1 overflow-hidden rounded-full bg-surface">
-        <div className={`h-full rounded-full bg-brand ${barWidthClass(pct)}`} />
+      <div className="h-3 flex-1 overflow-hidden rounded-full bg-neutral-base/10">
+        <div className={`h-full rounded-full bg-neutral-base/70 ${barWidthClass(pct)}`} />
       </div>
       <span className="w-16 shrink-0 text-right text-xs text-neutral-base/70">
         {count}명 ({pct}%)
@@ -47,17 +44,18 @@ function StatBar({ label, count, pct }: { label: string; count: number; pct: num
 function QuestionResult({ q, agg }: { q: SurveyQuestion; agg: QuestionAgg }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-neutral-base/70">
-          {QUESTION_TYPE_LABEL[q.question_type]}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-bold text-neutral-base">{q.title}</span>
+        <Badge tone="muted" className="text-neutral-base/70">
+          {QUESTION_TYPE_LABEL[q.question_type]}
+        </Badge>
       </div>
 
       {agg.kind === 'RATING' && (
         <div className="flex flex-col gap-1.5">
           <p className="text-sm text-neutral-base/80">
-            평균 <span className="font-bold text-brand">{agg.average.toFixed(2)}</span> / 5 · 응답 {agg.count}명
+            평균 <span className="font-bold text-neutral-base">{agg.average.toFixed(2)}</span> / 5 ·
+            응답 {agg.count}명
           </p>
           {RATING_SCALE.map((score) => {
             const cnt = agg.distribution[score - 1];
@@ -99,21 +97,20 @@ function QuestionResult({ q, agg }: { q: SurveyQuestion; agg: QuestionAgg }) {
   );
 }
 
-/** 응답자 식별 컬럼(기업/소속, 성명). */
-function respondentOrg(u: AssignableUser | undefined, role: 'STARTUP' | 'EXPERT'): string {
+/** 응답자(스타트업) 식별 컬럼(기업/소속, 성명). */
+function respondentOrg(u: AssignableUser | undefined): string {
   if (!u) return '(알 수 없음)';
-  if (role === 'STARTUP') return u.company_name ?? u.name;
-  return u.expert_organization ?? '';
+  return u.company_name ?? u.name;
 }
-function respondentName(u: AssignableUser | undefined, role: 'STARTUP' | 'EXPERT'): string {
+function respondentName(u: AssignableUser | undefined): string {
   if (!u) return '';
-  if (role === 'STARTUP') return u.representative_name ?? u.name;
-  return u.name;
+  return u.representative_name ?? u.name;
 }
 
 /**
- * 만족도 조사 결과 리포트 패널 (관리자 행사 상세 — 만족도 결과 탭).
+ * 만족도 조사 결과 리포트 패널 (관리자 행사 상세 — 행사 만족도 결과 탭).
  * 출처: docs/survey_customization_ideation.md §3.2, §5.
+ * 행사 만족도는 스타트업만 응답한다(전문가 응답 기능은 제거됨).
  * 응답률 + 문항별 집계(평점 분포·객관식 비율·주관식 목록) + CSV 내보내기.
  */
 export function SurveyReportPanel({
@@ -121,34 +118,70 @@ export function SurveyReportPanel({
   participants,
   userById,
   timezone,
+  onOpenSettings,
 }: {
   eventId: string;
   participants: EventParticipantRow[];
   userById: Map<string, AssignableUser>;
   timezone: string;
+  /** 제공 시 카드 헤더에 "행사 만족도 설정" 버튼을 노출(관리 권한일 때만 전달). */
+  onOpenSettings?: () => void;
 }) {
   const questionsQ = useEventSurveyQuestions(eventId);
   const reportQ = useSurveyReport(eventId);
 
-  const [role, setRole] = useState<'STARTUP' | 'EXPERT'>('STARTUP');
-
   const questions = useMemo(
     () =>
       (questionsQ.data ?? [])
-        .filter((q) => q.target_role === role || q.target_role === 'ALL')
+        .filter((q) => q.survey_scope === 'EVENT')
+        .filter((q) => q.target_role === 'STARTUP' || q.target_role === 'ALL')
         .sort((a, b) => a.order_no - b.order_no),
-    [questionsQ.data, role],
+    [questionsQ.data],
+  );
+
+  // 검색(응답 기업/대표자명) + 문항 유형 필터.
+  const [search, setSearch] = useState('');
+  const [kindFilter, setKindFilter] = useState<QuestionKindFilter>('ALL');
+  const keyword = useDebouncedValue(search.trim().toLowerCase(), 200);
+
+  // 현재 참가 중인 스타트업 user_id 집합 — 참가자 목록에서 제거된 스타트업의
+  // 잔존 응답(분모에는 없는데 분자에는 잡혀 응답률 100% 초과)을 집계에서 제외한다.
+  const startupParticipantIds = useMemo(
+    () =>
+      new Set(
+        participants.filter((p) => p.participant_type === 'STARTUP').map((p) => p.user_id),
+      ),
+    [participants],
   );
 
   const responses = useMemo(
-    () => (reportQ.data ?? []).filter((r) => r.user_role === role),
-    [reportQ.data, role],
+    () =>
+      (reportQ.data ?? []).filter(
+        (r) => r.user_role === 'STARTUP' && startupParticipantIds.has(r.user_id),
+      ),
+    [reportQ.data, startupParticipantIds],
   );
 
-  // 문항별 답변 모음(집계용).
+  // 검색어로 응답(스타트업)을 좁힌 집합 — 집계는 이 집합 기준으로 다시 계산된다.
+  const filteredResponses = useMemo(() => {
+    if (!keyword) return responses;
+    return responses.filter((r) => {
+      const u = userById.get(r.user_id);
+      return `${respondentOrg(u)} ${respondentName(u)}`.toLowerCase().includes(keyword);
+    });
+  }, [responses, keyword, userById]);
+
+  // 유형 필터로 노출할 문항만.
+  const visibleQuestions = useMemo(
+    () =>
+      questions.filter((q) => kindFilter === 'ALL' || questionKind(q.question_type) === kindFilter),
+    [questions, kindFilter],
+  );
+
+  // 문항별 답변 모음(검색으로 좁힌 응답 기준 집계).
   const answersByQuestion = useMemo(() => {
     const m = new Map<string, SurveyAnswerRow[]>();
-    for (const r of responses) {
+    for (const r of filteredResponses) {
       for (const a of r.answers) {
         const arr = m.get(a.question_id) ?? [];
         arr.push(a);
@@ -156,27 +189,20 @@ export function SurveyReportPanel({
       }
     }
     return m;
-  }, [responses]);
+  }, [filteredResponses]);
 
-  const totalForRole = useMemo(
-    () =>
-      participants.filter(
-        (p) => p.participant_type === role,
-      ).length,
-    [participants, role],
-  );
-  const rate = responseRate(totalForRole, responses.length);
+  const totalStartups = startupParticipantIds.size;
+  const rate = responseRate(totalStartups, responses.length);
 
   const handleExport = () => {
-    const headers = ['제출 시각', '유형', '기업/소속', '성명', ...questions.map((q) => q.title)];
+    const headers = ['제출 시각', '기업/소속', '성명', ...questions.map((q) => q.title)];
     const rows = responses.map((r) => {
       const u = userById.get(r.user_id);
       const ansMap = new Map(r.answers.map((a) => [a.question_id, a]));
       return [
         formatDateTime(r.submitted_at, timezone),
-        PARTICIPANT_ROLE_LABELS[role],
-        respondentOrg(u, role),
-        respondentName(u, role),
+        respondentOrg(u),
+        respondentName(u),
         ...questions.map((q) => answerToDisplay(q, ansMap.get(q.id))),
       ];
     });
@@ -186,7 +212,7 @@ export function SurveyReportPanel({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `만족도결과_${PARTICIPANT_ROLE_LABELS[role]}.csv`;
+    a.download = '행사만족도결과.csv';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -200,73 +226,85 @@ export function SurveyReportPanel({
   }
 
   return (
-    <Card className="flex flex-col gap-4 p-5">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-base font-bold text-neutral-base">만족도 조사 결과</h2>
-        <p className="text-sm text-neutral-base/70">
-          제출된 응답을 문항별로 집계합니다. CSV 로 내려받아 외부 보고에 활용할 수 있습니다.
-        </p>
-      </div>
-
-      {(questionsQ.isError || reportQ.isError) && (
-        <Alert tone="error">결과를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
-      )}
-
-      {/* 역할 탭 */}
-      <div className="flex gap-1.5">
-        {ROLE_TABS.map((t) => {
-          const active = role === t.value;
-          return (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => setRole(t.value)}
-              className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
-                active
-                  ? 'border-brand bg-brand text-white'
-                  : 'border-border bg-white text-neutral-base hover:bg-surface'
-              }`}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 응답률 + 내보내기 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3">
-        <div className="flex flex-col">
-          <span className="text-sm text-neutral-base/70">응답률</span>
-          <span className="text-lg font-bold text-neutral-base">
-            {rate.responded} / {rate.total}명{' '}
-            <span className="text-brand">({rate.pct}%)</span>
-          </span>
+    <div className="flex flex-col gap-4">
+      {/* 통계 카드 섹션 — 제목 + 응답 현황(예약/진행 관리와 동일한 StatBox 레이아웃) */}
+      <Card className="flex flex-col gap-5 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-base font-bold text-neutral-base">행사 만족도 결과</h2>
+            <p className="text-sm text-neutral-base/70">
+              스타트업이 제출한 행사 만족도 응답을 문항별로 집계합니다. CSV 로 내려받아 외부 보고에
+              활용할 수 있습니다.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {onOpenSettings && (
+              <Button variant="outline" onClick={onOpenSettings}>
+                행사 만족도 설정
+              </Button>
+            )}
+            <Button variant="outline" onClick={handleExport} disabled={responses.length === 0}>
+              CSV 내보내기
+            </Button>
+          </div>
         </div>
-        <Button variant="outline" onClick={handleExport} disabled={responses.length === 0}>
-          CSV 내보내기
-        </Button>
-      </div>
 
-      {/* 문항별 집계 */}
-      {questions.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-neutral-base/60">
-          이 유형의 설문 문항이 없습니다.
-        </p>
-      ) : responses.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-neutral-base/60">
-          아직 제출된 응답이 없습니다.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {questions.map((q) => (
-            <QuestionResult
-              key={q.id}
-              q={q}
-              agg={aggregateQuestion(q, answersByQuestion.get(q.id) ?? [])}
-            />
-          ))}
+        {(questionsQ.isError || reportQ.isError) && (
+          <Alert tone="error">결과를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
+        )}
+
+        {/* 응답 현황 */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatBox label="참가 스타트업" value={totalStartups} hint="개사" />
+          <StatBox label="응답 스타트업" value={rate.responded} hint="개사" />
+          <StatBox label="응답 대기" value={Math.max(0, rate.total - rate.responded)} hint="개사" />
+          <StatBox
+            label="응답률"
+            value={`${rate.pct}%`}
+            tone={rate.total > 0 && rate.responded === rate.total ? 'success' : 'default'}
+          />
         </div>
-      )}
-    </Card>
+      </Card>
+
+      {/* 문항별 집계 — 응답이 없어도 문항 구성은 그대로 노출(빈 집계로 표시). */}
+      <Card className="flex flex-col gap-4 p-5">
+        {/* 검색(응답 기업) + 문항 유형 토글 */}
+        <FilterBar>
+          <SearchInput value={search} onChange={setSearch} placeholder="응답 기업·대표자명 검색" />
+          <FilterChips<QuestionKindFilter>
+            value={kindFilter}
+            onChange={setKindFilter}
+            ariaLabel="문항 유형 필터"
+            options={QUESTION_KIND_FILTERS}
+          />
+        </FilterBar>
+
+        {keyword && (
+          <p className="text-xs text-neutral-base/60">
+            검색 결과 {filteredResponses.length}건 응답 기준으로 집계했습니다.
+          </p>
+        )}
+
+        {questions.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-neutral-base/60">
+            행사 만족도 문항이 없습니다. 행사 만족도 설정에서 문항을 추가하세요.
+          </p>
+        ) : visibleQuestions.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border px-3 py-8 text-center text-sm text-neutral-base/60">
+            선택한 유형의 문항이 없습니다.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {visibleQuestions.map((q) => (
+              <QuestionResult
+                key={q.id}
+                q={q}
+                agg={aggregateQuestion(q, answersByQuestion.get(q.id) ?? [])}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { eventFormSchema, cancelEventSchema } from '@/schemas/eventSchemas';
 import { localInputToIso, isoToLocalInput, formatRange } from '@/lib/datetime';
-import { EVENT_STATUS_LABELS } from '@/lib/labels';
+import { EVENT_STATUS_LABELS, SATISFACTION_POLICY_LABELS } from '@/lib/labels';
 
 const validForm = {
   title: '2026 매칭 데이',
@@ -9,6 +9,7 @@ const validForm = {
   timezone: 'Asia/Seoul',
   allow_startup_self_booking: false,
   allow_duplicate_expert: false,
+  satisfaction_policy: 'EVENT_ONLY' as const,
   booking_start: '2026-07-01T09:00',
   booking_end: '2026-07-05T18:00',
   event_start: '2026-07-10T10:00',
@@ -59,6 +60,23 @@ describe('eventFormSchema', () => {
       event_end: '2026-07-10T10:00',
     });
     expect(r.success).toBe(false);
+  });
+
+  it('만족도 수집 정책 4종을 허용하고 그 외는 거부', () => {
+    for (const p of ['EVENT_ONLY', 'EXPERT_ONLY', 'BOTH', 'NONE']) {
+      expect(eventFormSchema.safeParse({ ...validForm, satisfaction_policy: p }).success).toBe(true);
+    }
+    expect(
+      eventFormSchema.safeParse({ ...validForm, satisfaction_policy: 'INVALID' }).success,
+    ).toBe(false);
+  });
+});
+
+describe('SATISFACTION_POLICY_LABELS', () => {
+  it('정책 4종 모두 한국어 라벨을 가진다', () => {
+    expect(Object.keys(SATISFACTION_POLICY_LABELS)).toHaveLength(4);
+    expect(SATISFACTION_POLICY_LABELS.EVENT_ONLY).toBe('행사 전체 만족도만');
+    expect(SATISFACTION_POLICY_LABELS.NONE).toBe('수집 안 함');
   });
 });
 

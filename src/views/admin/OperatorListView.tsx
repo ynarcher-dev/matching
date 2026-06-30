@@ -4,15 +4,27 @@ import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { FullScreenLoader } from '@/components/common/FullScreenLoader';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
-import { OperatorTable } from '@/components/admin/OperatorTable';
+import { DataTable } from '@/components/common/DataTable';
+import { PageToolbar } from '@/components/common/PageToolbar';
+import { SearchInput, FilterChips } from '@/components/common/FilterBar';
+import { Pagination } from '@/components/common/Pagination';
+import {
+  buildOperatorColumns,
+  operatorSearchText,
+  operatorSortValues,
+} from '@/components/admin/operatorColumns';
 import { OperatorFormModal } from '@/components/admin/OperatorFormModal';
 import { OperatorSecretModal } from '@/components/admin/OperatorSecretModal';
 import { OperatorPermissionModal } from '@/components/admin/OperatorPermissionModal';
 import { useOperators } from '@/hooks/useOperators';
 import { useUpdateOperator, useResetOperatorPassword } from '@/hooks/useOperatorMutations';
+import { useDataTable } from '@/hooks/useDataTable';
 import { useAuthStore } from '@/stores/authStore';
 import { summarizeOperators } from '@/lib/operator';
 import type { Operator, OperatorSecretResult } from '@/types/operator';
+
+/** 활성 상태 필터 값. */
+type ActiveFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 /**
  * 운영자 관리 페이지 (page_admin_operator_permissions.md 4 — 최고관리자 전용).
@@ -24,24 +36,21 @@ export function OperatorListView() {
   const update = useUpdateOperator();
   const reset = useResetOperatorPassword();
 
-  const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Operator | null>(null);
   const [toggleTarget, setToggleTarget] = useState<Operator | null>(null);
   const [resetTarget, setResetTarget] = useState<Operator | null>(null);
   const [assignTarget, setAssignTarget] = useState<Operator | null>(null);
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>('ALL');
   const [secret, setSecret] = useState<{ result: OperatorSecretResult; email: string } | null>(null);
 
   const summary = useMemo(() => summarizeOperators(operators ?? []), [operators]);
 
-  const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return operators ?? [];
-    return (operators ?? []).filter(
-      (o) =>
-        o.name.toLowerCase().includes(keyword) || o.email.toLowerCase().includes(keyword),
-    );
-  }, [operators, search]);
+  const filters = useMemo(() => {
+    if (activeFilter === 'ACTIVE') return [(o: Operator) => o.active];
+    if (activeFilter === 'INACTIVE') return [(o: Operator) => !o.active];
+    return [];
+  }, [activeFilter]);
 
   const openCreate = () => {
     setEditTarget(null);
@@ -52,7 +61,28 @@ export function OperatorListView() {
     setFormOpen(true);
   };
 
+  const table = useDataTable(operators ?? [], {
+    getSearchText: operatorSearchText,
+    sortValues: operatorSortValues,
+    filters,
+    initialSort: { key: 'created_at', direction: 'desc' },
+  });
+
+  const columns = useMemo(
+    () =>
+      buildOperatorColumns({
+        currentUserId,
+        onEdit: openEdit,
+        onAssign: setAssignTarget,
+        onResetPassword: setResetTarget,
+        onToggleActive: setToggleTarget,
+      }),
+    [currentUserId],
+  );
+
   if (isLoading) return <FullScreenLoader />;
+
+  const hasAny = (operators ?? []).length > 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -72,33 +102,49 @@ export function OperatorListView() {
         <SummaryCard label="현장 스태프" value={summary.staff} />
       </div>
 
-      <input
-        type="search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="이름·이메일 검색"
-        aria-label="운영자 검색"
-        className="w-full max-w-xs rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+      <PageToolbar
+        search={
+          <SearchInput
+            value={table.search}
+            onChange={table.setSearch}
+            placeholder="이름·이메일 검색"
+          />
+        }
+        filters={
+          <FilterChips<ActiveFilter>
+            value={activeFilter}
+            onChange={setActiveFilter}
+            ariaLabel="활성 상태 필터"
+            options={[
+              { value: 'ALL', label: '전체' },
+              { value: 'ACTIVE', label: '활성' },
+              { value: 'INACTIVE', label: '비활성' },
+            ]}
+          />
+        }
       />
 
-      {filtered.length === 0 ? (
-        <Card className="p-10 text-center">
-          <p className="text-sm text-neutral-base/70">
-            {(operators ?? []).length === 0
-              ? '등록된 운영자가 없습니다. 운영자를 추가해 주세요.'
-              : '검색 조건에 맞는 운영자가 없습니다.'}
-          </p>
-        </Card>
-      ) : (
-        <OperatorTable
-          operators={filtered}
-          currentUserId={currentUserId}
-          onEdit={openEdit}
-          onToggleActive={setToggleTarget}
-          onResetPassword={setResetTarget}
-          onAssign={setAssignTarget}
-        />
-      )}
+      <DataTable
+        columns={columns}
+        rows={table.rows}
+        rowKey={(op) => op.id}
+        sort={table.sort}
+        onSort={table.toggleSort}
+        minWidthClass="min-w-[860px]"
+        emptyMessage={
+          hasAny
+            ? '검색·필터 조건에 맞는 운영자가 없습니다.'
+            : '등록된 운영자가 없습니다. 운영자를 추가해 주세요.'
+        }
+      />
+
+      <Pagination
+        page={table.page}
+        totalPages={table.totalPages}
+        pageSize={table.pageSize}
+        total={table.totalFiltered}
+        onPageChange={table.setPage}
+      />
 
       <OperatorFormModal
         open={formOpen}

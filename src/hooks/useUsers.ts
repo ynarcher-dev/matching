@@ -4,14 +4,14 @@ import type {
   AuthChannel,
   ParticipantRow,
   ParticipantWithAuth,
-  UserAuthOverview,
 } from '@/types/user';
 
 /** 관리자 목록·폼에서 쓰는 참가자 컬럼(민감 컬럼 제외). */
 const PARTICIPANT_COLUMNS =
   'id,email,name,role,phone_number,company_name,representative_name,contact_name,' +
   'company_description,company_homepage,expert_organization,expert_position,' +
-  'expert_description,proposal_file_url,profile_image_url,session_version,created_at';
+  'expert_description,proposal_file_url,proposal_uploaded_at,proposal_uploaded_by,' +
+  'profile_image_url,last_login_at,session_version,created_at';
 
 export const userKeys = {
   all: ['users'] as const,
@@ -36,7 +36,7 @@ export function useParticipants() {
   return useQuery<ParticipantWithAuth[]>({
     queryKey: userKeys.list(),
     queryFn: async () => {
-      const [usersRes, overviewRes, fieldsRes] = await Promise.all([
+      const [usersRes, fieldsRes] = await Promise.all([
         supabase
           .from('users')
           .select(PARTICIPANT_COLUMNS)
@@ -44,17 +44,10 @@ export function useParticipants() {
           .in('role', ['EXPERT', 'STARTUP'])
           .order('created_at', { ascending: false })
           .returns<ParticipantRow[]>(),
-        supabase.rpc('admin_participant_auth_overview'),
         supabase.from('user_fields').select('user_id,field_id').returns<UserFieldRow[]>(),
       ]);
       if (usersRes.error) throw usersRes.error;
-      if (overviewRes.error) throw overviewRes.error;
       if (fieldsRes.error) throw fieldsRes.error;
-
-      const overview = new Map<string, UserAuthOverview>();
-      for (const o of (overviewRes.data as UserAuthOverview[] | null) ?? []) {
-        overview.set(o.user_id, o);
-      }
 
       const fieldsByUser = new Map<string, string[]>();
       for (const f of fieldsRes.data ?? []) {
@@ -63,11 +56,32 @@ export function useParticipants() {
         else fieldsByUser.set(f.user_id, [f.field_id]);
       }
 
+      // 소개서 업로드 주체 이름 해석(업로더는 운영자일 수 있어 참가자 집합 밖이라 별도 조회).
+      const uploaderIds = [
+        ...new Set(
+          (usersRes.data ?? [])
+            .map((u) => u.proposal_uploaded_by)
+            .filter((v): v is string => Boolean(v)),
+        ),
+      ];
+      const uploaderNameById = new Map<string, string>();
+      if (uploaderIds.length > 0) {
+        const { data: uploaders, error: upErr } = await supabase
+          .from('users')
+          .select('id,name')
+          .in('id', uploaderIds)
+          .returns<{ id: string; name: string }[]>();
+        if (upErr) throw upErr;
+        for (const up of uploaders ?? []) uploaderNameById.set(up.id, up.name);
+      }
+
       return (usersRes.data ?? []).map((u) => ({
         ...u,
         channels: deriveChannels(u),
-        auth: overview.get(u.id) ?? null,
         field_ids: fieldsByUser.get(u.id) ?? [],
+        proposal_uploader_name: u.proposal_uploaded_by
+          ? (uploaderNameById.get(u.proposal_uploaded_by) ?? null)
+          : null,
       }));
     },
   });

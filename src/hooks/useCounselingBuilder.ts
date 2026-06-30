@@ -108,18 +108,40 @@ export function useDeleteCounselingQuestion(eventId: string) {
   });
 }
 
-/** 두 문항의 순서(order_no)를 맞바꾼다(▲/▼ 이동). */
-export function useSwapCounselingQuestionOrder(eventId: string) {
-  const invalidate = useInvalidateQuestions(eventId);
+/**
+ * 드래그앤드롭 재정렬 — 여러 문항의 order_no 를 한 번에 갱신한다.
+ * 기존 order_no 값 집합을 새 순서에 그대로 재배치하므로 값 공간이 보존된다.
+ * 낙관적 업데이트로 드롭 즉시 화면에 반영하고, 실패 시 롤백한다.
+ */
+export function useReorderCounselingQuestions(eventId: string) {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (pair: [{ id: string; order_no: number }, { id: string; order_no: number }]) => {
-      const [a, b] = pair;
-      const r1 = await supabase.from('counseling_log_questions').update({ order_no: b.order_no }).eq('id', a.id);
-      if (r1.error) throw new Error(r1.error.message);
-      const r2 = await supabase.from('counseling_log_questions').update({ order_no: a.order_no }).eq('id', b.id);
-      if (r2.error) throw new Error(r2.error.message);
+    mutationFn: async (updates: { id: string; order_no: number }[]) => {
+      if (updates.length === 0) return;
+      const results = await Promise.all(
+        updates.map((u) =>
+          supabase.from('counseling_log_questions').update({ order_no: u.order_no }).eq('id', u.id),
+        ),
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw new Error(failed.error.message || '순서를 변경하지 못했습니다.');
     },
-    onSuccess: invalidate,
+    onMutate: async (updates) => {
+      await qc.cancelQueries({ queryKey: counselingBuilderKeys.questions(eventId) });
+      const prev = qc.getQueryData<CounselingQuestion[]>(counselingBuilderKeys.questions(eventId));
+      if (prev) {
+        const next = new Map(updates.map((u) => [u.id, u.order_no]));
+        qc.setQueryData<CounselingQuestion[]>(
+          counselingBuilderKeys.questions(eventId),
+          prev.map((q) => (next.has(q.id) ? { ...q, order_no: next.get(q.id)! } : q)),
+        );
+      }
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(counselingBuilderKeys.questions(eventId), ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: counselingBuilderKeys.questions(eventId) }),
   });
 }
 

@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { eventKeys } from '@/hooks/useEvents';
 import { eventDetailKeys } from '@/hooks/useEventDetail';
+import { removeParticipantFile, uploadParticipantFile } from '@/lib/storage';
 import type { EventTableFormValues } from '@/schemas/eventDetailSchemas';
 import type { ParticipantRole } from '@/types/user';
 
@@ -44,7 +45,51 @@ export function useAddParticipants(eventId: string) {
   });
 }
 
-/** 참가자 제외 — event_participants DELETE(슬롯은 FK SET NULL 로 보존). */
+/**
+ * 스타트업 IR/소개서 업로드·교체·해제(관리자 대행, 참가자 지정 화면에서).
+ * `proposals` 버킷 업로드(동일 경로 upsert) 후 users.proposal_file_url 갱신.
+ * 8-H 와 동일 경로(DB 관리·이 화면·스타트업 본인 어디서나 업로드 가능).
+ */
+export function useUploadParticipantProposal(eventId: string) {
+  const invalidate = useDetailInvalidation(eventId);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      file,
+      currentPath,
+      remove,
+    }: {
+      userId: string;
+      file?: File | null;
+      currentPath?: string | null;
+      remove?: boolean;
+    }) => {
+      if (remove) {
+        const { error } = await supabase
+          .from('users')
+          .update({ proposal_file_url: null })
+          .eq('id', userId);
+        if (error) throw error;
+        if (currentPath) await removeParticipantFile(currentPath).catch(() => undefined);
+        return;
+      }
+      if (!file) return;
+      const path = await uploadParticipantFile('STARTUP', userId, file);
+      const { error } = await supabase
+        .from('users')
+        .update({ proposal_file_url: path })
+        .eq('id', userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: eventDetailKeys.assignable });
+    },
+  });
+}
+
+/** 참가자 제외 — event_participants DELETE(0055 트리거가 그 사람의 슬롯·상담일지·제안을 정리). */
 export function useRemoveParticipant(eventId: string) {
   const invalidate = useDetailInvalidation(eventId);
   return useMutation({
@@ -54,6 +99,23 @@ export function useRemoveParticipant(eventId: string) {
         .delete()
         .eq('id', participantId);
       if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** 참가자 복수 제외 — event_participants 일괄 DELETE(ADMIN RLS). */
+export function useRemoveParticipants(eventId: string) {
+  const invalidate = useDetailInvalidation(eventId);
+  return useMutation({
+    mutationFn: async (participantIds: string[]) => {
+      if (participantIds.length === 0) return 0;
+      const { error } = await supabase
+        .from('event_participants')
+        .delete()
+        .in('id', participantIds);
+      if (error) throw error;
+      return participantIds.length;
     },
     onSuccess: invalidate,
   });
@@ -80,7 +142,46 @@ export function useSetDefaultTable(eventId: string) {
   });
 }
 
-/** 행사장 테이블 등록/편집 — event_tables INSERT/UPDATE(ADMIN RLS). */
+/**
+ * 행사 테이블 기준 담당 전문가 지정 — 1 테이블 = 1 전문가 규약.
+ * 먼저 이 테이블을 기본 테이블로 둔 전문가를 모두 해제하고(중복 방지),
+ * 새 전문가를 지정하면 그 전문가의 default_table_id 를 이 테이블로 옮긴다
+ * (default_table_id 는 단일 컬럼이라 이전 테이블은 자동 해제).
+ */
+export function useSetTableExpert(eventId: string) {
+  const invalidate = useDetailInvalidation(eventId);
+  return useMutation({
+    mutationFn: async ({
+      tableId,
+      participantId,
+    }: {
+      tableId: string;
+      participantId: string | null;
+    }) => {
+      // 1) 이 테이블을 점유 중이던 전문가를 모두 해제(1:1 유지).
+      const { error: clearErr } = await supabase
+        .from('event_participants')
+        .update({ default_table_id: null })
+        .eq('event_id', eventId)
+        .eq('default_table_id', tableId);
+      if (clearErr) throw clearErr;
+      // 2) 새 전문가를 이 테이블로 지정(이전 테이블은 단일 컬럼이라 자동 대체).
+      if (participantId) {
+        const { error: setErr } = await supabase
+          .from('event_participants')
+          .update({ default_table_id: tableId })
+          .eq('id', participantId);
+        if (setErr) throw setErr;
+      }
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * 행사장 테이블 등록/편집 — event_tables INSERT/UPDATE(ADMIN RLS).
+ * 저장된 테이블 id 를 반환한다(생성 직후 담당 전문가 배정에 사용).
+ */
 export function useSaveEventTable(eventId: string) {
   const invalidate = useDetailInvalidation(eventId);
   return useMutation({
@@ -93,12 +194,15 @@ export function useSaveEventTable(eventId: string) {
       if (id) {
         const { error } = await supabase.from('event_tables').update(row).eq('id', id);
         if (error) throw mapTableError(error);
-      } else {
-        const { error } = await supabase
-          .from('event_tables')
-          .insert({ ...row, event_id: eventId });
-        if (error) throw mapTableError(error);
+        return id;
       }
+      const { data, error } = await supabase
+        .from('event_tables')
+        .insert({ ...row, event_id: eventId })
+        .select('id')
+        .single();
+      if (error) throw mapTableError(error);
+      return (data as { id: string }).id;
     },
     onSuccess: invalidate,
   });
@@ -111,6 +215,20 @@ export function useDeleteEventTable(eventId: string) {
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('event_tables').delete().eq('id', id);
       if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** 행사장 테이블 복수 삭제 — event_tables 일괄 DELETE(참조 슬롯/참가자는 FK SET NULL). */
+export function useDeleteEventTables(eventId: string) {
+  const invalidate = useDetailInvalidation(eventId);
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (ids.length === 0) return 0;
+      const { error } = await supabase.from('event_tables').delete().in('id', ids);
+      if (error) throw error;
+      return ids.length;
     },
     onSuccess: invalidate,
   });

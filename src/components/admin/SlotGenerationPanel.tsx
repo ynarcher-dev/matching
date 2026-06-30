@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Card } from '@/components/common/Card';
+import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { TextField } from '@/components/common/TextField';
 import { Alert } from '@/components/common/Alert';
@@ -122,10 +123,10 @@ export function SlotGenerationPanel({
     <Card className="flex flex-col gap-4 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-bold text-neutral-base">슬롯 자동 생성</h2>
-        <div className="flex flex-wrap gap-1.5 text-xs">
-          <Stat label="전문가" value={`${expertCount}명`} />
-          <Stat label="빈 슬롯" value={`${emptyCount}개`} />
-          <Stat label="예약" value={`${bookedCount}개`} />
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Badge tone="neutral">전문가 {expertCount}명</Badge>
+          <Badge tone="muted">빈 슬롯 {emptyCount}개</Badge>
+          <Badge tone="brand">예약 {bookedCount}개</Badge>
         </div>
       </div>
 
@@ -144,48 +145,65 @@ export function SlotGenerationPanel({
           className="flex flex-col gap-3 rounded-xl border border-border bg-surface/40 p-3"
           noValidate
         >
-          <TextField
-            label="시작 시각"
-            type="datetime-local"
-            error={errors.start_local?.message}
-            {...register('start_local')}
-          />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <TextField
-              label="세션 길이(분)"
-              type="number"
-              min={1}
-              max={600}
-              error={errors.session_minutes?.message}
-              {...register('session_minutes')}
-            />
-            <TextField
-              label="휴식(분)"
-              type="number"
-              min={0}
-              max={600}
-              error={errors.break_minutes?.message}
-              {...register('break_minutes')}
-            />
-            <TextField
-              label="세션 횟수"
-              type="number"
-              min={1}
-              max={50}
-              error={errors.session_count?.message}
-              {...register('session_count')}
-            />
+          {/* 시작 시각·세션 길이·휴식·세션 횟수·생성/초기화 버튼·재생성 토글을 한 행에 배치(좁아지면 자동 줄바꿈). */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-72">
+              <TextField
+                label="시작 시각"
+                type="datetime-local"
+                error={errors.start_local?.message}
+                {...register('start_local')}
+              />
+            </div>
+            <div className="w-28">
+              <TextField
+                label="세션 길이(분)"
+                type="number"
+                min={1}
+                max={600}
+                error={errors.session_minutes?.message}
+                {...register('session_minutes')}
+              />
+            </div>
+            <div className="w-24">
+              <TextField
+                label="휴식(분)"
+                type="number"
+                min={0}
+                max={600}
+                error={errors.break_minutes?.message}
+                {...register('break_minutes')}
+              />
+            </div>
+            <div className="w-24">
+              <TextField
+                label="세션 횟수"
+                type="number"
+                min={1}
+                max={50}
+                error={errors.session_count?.message}
+                {...register('session_count')}
+              />
+            </div>
+            <Button type="submit" loading={generate.isPending}>
+              슬롯 생성
+            </Button>
+            {emptyCount > 0 && (
+              <Button type="button" variant="outline" onClick={() => setShowClear(true)}>
+                빈 슬롯 초기화
+              </Button>
+            )}
+            <label className="flex items-center gap-2 py-2 text-sm font-medium text-neutral-base">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
+                {...register('replace_unbooked')}
+              />
+              기존 빈 슬롯을 지우고 다시 생성(예약된 슬롯은 유지)
+            </label>
           </div>
 
-          <label className="flex items-center gap-2 text-sm font-medium text-neutral-base">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
-              {...register('replace_unbooked')}
-            />
-            기존 빈 슬롯을 지우고 다시 생성(예약된 슬롯은 유지)
-          </label>
-
+          {/* 생성될 슬롯 정보(미리보기). */}
           {preview && (
             <div className="flex flex-col gap-2 rounded-lg border border-border bg-white p-3 text-sm">
               <p className="text-neutral-base">
@@ -198,12 +216,9 @@ export function SlotGenerationPanel({
               </p>
               <div className="flex flex-wrap gap-1">
                 {preview.track.slice(0, PREVIEW_LIMIT).map((t) => (
-                  <span
-                    key={t.startIso}
-                    className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-neutral-base/70"
-                  >
+                  <Badge key={t.startIso} tone="muted" size="11">
                     {formatDateTime(t.startIso, tz).slice(-5)}
-                  </span>
+                  </Badge>
                 ))}
                 {preview.track.length > PREVIEW_LIMIT && (
                   <span className="px-1 py-0.5 text-xs text-neutral-base/50">
@@ -221,17 +236,6 @@ export function SlotGenerationPanel({
           {createdCount !== null && !generate.isError && (
             <Alert tone="success">슬롯 {createdCount}개를 생성했습니다.</Alert>
           )}
-
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" loading={generate.isPending}>
-              슬롯 생성
-            </Button>
-            {emptyCount > 0 && (
-              <Button type="button" variant="outline" onClick={() => setShowClear(true)}>
-                빈 슬롯 초기화
-              </Button>
-            )}
-          </div>
         </form>
       )}
 
@@ -258,13 +262,5 @@ export function SlotGenerationPanel({
         }}
       />
     </Card>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="rounded-full border border-border bg-surface px-2.5 py-1 font-medium text-neutral-base/70">
-      {label} <span className="font-bold text-neutral-base">{value}</span>
-    </span>
   );
 }

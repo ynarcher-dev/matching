@@ -1,3 +1,5 @@
+import { Badge } from '@/components/common/Badge';
+import { Button } from '@/components/common/Button';
 import { SelectField } from '@/components/common/SelectField';
 import { formatDateTime } from '@/lib/datetime';
 import { scorePercent } from '@/lib/allocation';
@@ -41,64 +43,65 @@ export function ProposalSlotCard({
 }: ProposalSlotCardProps) {
   const time = formatDateTime(slot.start_time, timezone).slice(-5);
 
-  // 1) 이미 확정된 예약(수동/AI/강제) — 민트.
+  // 1) 이미 확정된 예약(수동/AI/강제) — success(민트).
   if (bookedLabel) {
     return (
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+      <div className="rounded-lg border border-success-border bg-success-surface px-3 py-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold text-emerald-700">{time}</span>
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+          <span className="text-xs font-semibold text-success">{time}</span>
+          <Badge tone="success" size="11">
             {BOOKING_TYPE_LABELS[slot.booking_type]}
-          </span>
+          </Badge>
         </div>
         <p className="mt-1 text-sm font-medium text-neutral-base">{bookedLabel}</p>
       </div>
     );
   }
 
-  // 2) AI 제안 — 연보라(+ 충돌 시 붉은 보더, 분야 불일치 경고).
+  // 2) AI 제안 — ai(연보라)(+ 충돌 시 danger 보더, 분야 불일치 경고).
   if (proposal) {
     return (
       <div
-        className={`rounded-lg border bg-violet-50 px-3 py-2 ${
-          conflict ? 'border-red-400 ring-1 ring-red-300' : 'border-violet-200'
+        className={`rounded-lg border bg-ai-surface px-3 py-2 ${
+          conflict ? 'border-danger ring-1 ring-danger-border' : 'border-ai-border'
         }`}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold text-violet-700">{time}</span>
-          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+          <span className="text-xs font-semibold text-ai">{time}</span>
+          <Badge tone="ai" size="11">
             AI 제안 · 적합도 {scorePercent(proposal.score)}%
-          </span>
+          </Badge>
         </div>
         <p className="mt-1 text-sm font-medium text-neutral-base">{proposalLabel}</p>
 
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {!proposal.field_matched && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">
+            <Badge tone="warning" size="11">
               ⚠ 분야 불일치
-            </span>
+            </Badge>
           )}
           {conflict && (
-            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
+            <Badge tone="danger" size="11">
               충돌 우려
-            </span>
+            </Badge>
           )}
           {proposal.is_locked && (
-            <span className="rounded-full bg-neutral-base/10 px-2 py-0.5 text-[11px] font-semibold text-neutral-base/70">
+            <Badge tone="muted" size="11">
               🔒 고정
-            </span>
+            </Badge>
           )}
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             disabled={busy}
             onClick={() => onToggleLock(proposal.id, !proposal.is_locked)}
-            className="rounded-md border border-border bg-white px-2 py-1 text-xs font-semibold text-neutral-base transition-colors hover:bg-surface disabled:opacity-50"
           >
             {proposal.is_locked ? '고정 해제' : '고정'}
-          </button>
+          </Button>
           {moveOptions.length > 0 && (
             <div className="min-w-[180px] flex-1">
               <SelectField

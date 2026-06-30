@@ -23,3 +23,7 @@ desktop.ini
 
 # Test/coverage
 coverage
+
+# Temporary vite config timestamp files
+vite.config.ts.timestamp-*
+

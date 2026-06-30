@@ -75,19 +75,28 @@ export function validateParticipantFile(role: ParticipantRole, file: File): stri
   return null;
 }
 
-/** 객체 경로를 만든다: `{bucket}/{userId}/{purpose}.{ext}` (사용자당 1개, 교체 시 덮어쓰기). */
+/**
+ * 객체 경로를 만든다. 소유자 폴더(`{bucket}/{userId}/`) 규칙은 RLS(_storage_owner_id)와 정합.
+ *   - STARTUP(소개서): 업로드마다 고유 경로(`proposals/{userId}/{uuid}.pdf`)로 과거본을 보존한다
+ *     (교체 이력 타임라인 — 0052). 이전 객체는 삭제하지 않는다.
+ *   - EXPERT(프로필): 사용자당 1개 고정 경로(`avatars/{userId}/avatar.{ext}`, 교체 시 덮어쓰기).
+ */
 function buildObjectPath(role: ParticipantRole, userId: string, file: File): string {
   const spec = BUCKET_SPEC[role];
   const ext = EXT_BY_TYPE[file.type] ?? 'bin';
-  const base = role === 'STARTUP' ? 'proposal' : 'avatar';
-  return `${spec.bucket}/${userId}/${base}.${ext}`;
+  if (role === 'STARTUP') {
+    return `${spec.bucket}/${userId}/${crypto.randomUUID()}.${ext}`;
+  }
+  return `${spec.bucket}/${userId}/avatar.${ext}`;
 }
 
 /**
- * 파일을 업로드하고 저장할 객체 경로를 반환한다(컬럼에는 이 경로를 저장).
+ * 주어진 클라이언트로 파일을 업로드하고 저장할 객체 경로를 반환한다(컬럼에는 이 경로를 저장).
+ * 운영진은 `supabase`, 참가자(스타트업 자가 업로드)는 `participantClient` 를 넘겨 RLS 를 적용한다.
  * 같은 경로면 upsert 로 덮어쓰고, 확장자가 달라 경로가 바뀌면 호출부가 이전 경로를 정리한다.
  */
-export async function uploadParticipantFile(
+export async function uploadParticipantFileWithClient(
+  client: SupabaseClient,
   role: ParticipantRole,
   userId: string,
   file: File,
@@ -95,7 +104,7 @@ export async function uploadParticipantFile(
   const spec = BUCKET_SPEC[role];
   const path = buildObjectPath(role, userId, file);
   const objectKey = path.slice(spec.bucket.length + 1); // 버킷명 접두 제거(from(bucket) 기준 키)
-  const { error } = await supabase.storage.from(spec.bucket).upload(objectKey, file, {
+  const { error } = await client.storage.from(spec.bucket).upload(objectKey, file, {
     upsert: true,
     contentType: file.type,
   });
@@ -103,12 +112,29 @@ export async function uploadParticipantFile(
   return path;
 }
 
-/** 저장된 객체 경로(`{bucket}/...`)의 파일을 삭제한다. */
-export async function removeParticipantFile(path: string): Promise<void> {
+/** 운영진 클라이언트로 파일을 업로드한다(관리자 대행 등록). */
+export async function uploadParticipantFile(
+  role: ParticipantRole,
+  userId: string,
+  file: File,
+): Promise<string> {
+  return uploadParticipantFileWithClient(supabase, role, userId, file);
+}
+
+/** 주어진 클라이언트로 저장된 객체 경로(`{bucket}/...`)의 파일을 삭제한다. */
+export async function removeParticipantFileWithClient(
+  client: SupabaseClient,
+  path: string,
+): Promise<void> {
   const bucket = path.split('/')[0] as FileBucket;
   const objectKey = path.slice(bucket.length + 1);
   if (!objectKey) return;
-  await supabase.storage.from(bucket).remove([objectKey]);
+  await client.storage.from(bucket).remove([objectKey]);
+}
+
+/** 저장된 객체 경로(`{bucket}/...`)의 파일을 삭제한다(운영진 클라이언트). */
+export async function removeParticipantFile(path: string): Promise<void> {
+  return removeParticipantFileWithClient(supabase, path);
 }
 
 /**
@@ -125,6 +151,34 @@ export async function createSignedUrlWithClient(
   const { data, error } = await client.storage.from(bucket).createSignedUrl(objectKey, expiresInSec);
   if (error || !data) throw new Error(`파일 링크 생성에 실패했습니다: ${error?.message ?? ''}`);
   return data.signedUrl;
+}
+
+/**
+ * 여러 객체 경로(`{bucket}/...`, 동일 버킷 가정)의 단기 Signed URL 을 한 번에 만든다.
+ * 반환은 경로→URL 맵(생성 실패한 항목은 누락). 전문가 프로필 사진 일괄 표시 등에 쓴다.
+ */
+export async function createSignedUrlsWithClient(
+  client: SupabaseClient,
+  paths: string[],
+  expiresInSec = 300,
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (paths.length === 0) return result;
+  const bucket = paths[0].split('/')[0] as FileBucket;
+  const keyToPath = new Map<string, string>();
+  const objectKeys = paths.map((p) => {
+    const key = p.slice(bucket.length + 1);
+    keyToPath.set(key, p);
+    return key;
+  });
+  const { data, error } = await client.storage.from(bucket).createSignedUrls(objectKeys, expiresInSec);
+  if (error) throw new Error(`파일 링크 생성에 실패했습니다: ${error.message}`);
+  for (const item of data ?? []) {
+    if (item.error || !item.signedUrl || !item.path) continue;
+    const full = keyToPath.get(item.path);
+    if (full) result.set(full, item.signedUrl);
+  }
+  return result;
 }
 
 /** 저장된 객체 경로로 단기 Signed URL 을 생성한다(운영진 클라이언트, 기본 60초). */

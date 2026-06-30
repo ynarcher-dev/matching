@@ -7,6 +7,8 @@ import type { AppRole, AppUser } from '@/types/auth';
 export interface NavItem {
   label: string;
   path: string;
+  /** 접힌 사이드바(9-C)에서 표시할 아이콘 글리프. */
+  icon: string;
 }
 
 /** 로그인 직후 역할별 진입 경로. */
@@ -20,21 +22,22 @@ export const ROLE_HOME_PATH: Record<AppRole, string> = {
 /** 사이드바 메뉴(역할별 가변). */
 export const ROLE_NAV: Record<AppRole, NavItem[]> = {
   ADMIN: [
-    { label: '행사 목록', path: '/admin/events' },
-    { label: '참가자 DB 관리', path: '/admin/users' },
-    { label: '설정', path: '/admin/settings' },
+    { label: '행사 목록', path: '/admin/events', icon: '📅' },
+    { label: '스타트업 DB', path: '/admin/startups', icon: '🚀' },
+    { label: '전문가 DB', path: '/admin/experts', icon: '👤' },
+    { label: '안내발송 관리', path: '/admin/settings', icon: '🔔' },
   ],
   STAFF: [
-    { label: '출석 체크', path: '/staff/check-in' },
-    { label: '현장 사진', path: '/staff/photos' },
+    { label: '출석 체크', path: '/staff/check-in', icon: '✅' },
+    { label: '현장 사진', path: '/staff/photos', icon: '📷' },
   ],
   EXPERT: [
-    { label: '오늘의 스케줄', path: '/expert/dashboard' },
-    { label: '이전 상담 이력', path: '/expert/history' },
+    { label: '오늘의 스케줄', path: '/expert/dashboard', icon: '🗓' },
+    { label: '이전 상담 이력', path: '/expert/history', icon: '📋' },
   ],
   STARTUP: [
-    { label: '내 예약 관리', path: '/startup/booking' },
-    { label: '안내 사항', path: '/startup/notices' },
+    { label: '내 예약 관리', path: '/startup/booking', icon: '🗓' },
+    { label: '안내 사항', path: '/startup/notices', icon: '📢' },
   ],
 };
 
@@ -43,12 +46,22 @@ export function homePathFor(role: AppRole): string {
 }
 
 /**
- * 사용자별 사이드바 메뉴. 기본은 역할 메뉴이며, 최고관리자는 운영자 관리 메뉴가 추가된다.
+ * 사용자별 사이드바 메뉴 (page_admin_operator_permissions.md §5.1).
+ * 일반 ADMIN/STAFF 는 역할 메뉴를 쓰되, 전역 화면(스타트업/전문가 DB·안내발송 관리·운영자 관리)은
+ * 최고관리자에게만 노출한다. 일반 관리자는 배정 행사만 다루므로 `행사 목록`만 본다.
  */
 export function navItemsFor(user: AppUser): NavItem[] {
-  const base = ROLE_NAV[user.role];
-  if (user.role === 'ADMIN' && user.is_super_admin) {
-    return [...base, { label: '운영자 관리', path: '/admin/operators' }];
+  if (user.role === 'ADMIN') {
+    const items: NavItem[] = [{ label: '행사 목록', path: '/admin/events', icon: '📅' }];
+    if (user.is_super_admin) {
+      items.push(
+        { label: '스타트업 DB', path: '/admin/startups', icon: '🚀' },
+        { label: '전문가 DB', path: '/admin/experts', icon: '👤' },
+        { label: '안내발송 관리', path: '/admin/settings', icon: '🔔' },
+        { label: '운영자 관리', path: '/admin/operators', icon: '🔐' },
+      );
+    }
+    return items;
   }
-  return base;
+  return ROLE_NAV[user.role];
 }

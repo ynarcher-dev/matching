@@ -116,13 +116,15 @@ export function OperatorPermissionModal({ open, onClose, operator }: OperatorPer
                         {OPERATOR_PERMISSION_LABELS[r.permission]} ({r.permission})
                       </span>
                     </div>
-                    <button
+                    <Button
                       type="button"
                       onClick={() => setRevokeTarget(r)}
-                      className="shrink-0 rounded-md border border-brand px-2.5 py-1 text-xs font-semibold text-brand transition-colors hover:bg-danger-surface"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 text-brand"
                     >
                       회수
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>

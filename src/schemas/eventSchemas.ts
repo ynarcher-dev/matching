@@ -21,6 +21,7 @@ export const eventFormSchema = z
     timezone: z.string().min(1, '시간대를 선택해 주세요.'),
     allow_startup_self_booking: z.boolean(),
     allow_duplicate_expert: z.boolean(),
+    satisfaction_policy: z.enum(['EVENT_ONLY', 'EXPERT_ONLY', 'BOTH', 'NONE']),
     booking_start: z.string().min(1, '예약 시작 일시를 입력해 주세요.'),
     booking_end: z.string().min(1, '예약 마감 일시를 입력해 주세요.'),
     event_start: z.string().min(1, '행사 시작 일시를 입력해 주세요.'),

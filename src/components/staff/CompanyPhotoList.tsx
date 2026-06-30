@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { TextField } from '@/components/common/TextField';
+import { Badge } from '@/components/common/Badge';
 import { filterCompanyStatuses } from '@/lib/companyPhoto';
 import type { CompanyPhotoStatus } from '@/types/companyPhoto';
 
@@ -55,13 +56,13 @@ export function CompanyPhotoList({
                     </span>
                   </span>
                   {c.photoCount > 0 ? (
-                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                    <Badge tone="success" className="shrink-0">
                       사진 {c.photoCount}
-                    </span>
+                    </Badge>
                   ) : (
-                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                    <Badge tone="warning" className="shrink-0">
                       미등록
-                    </span>
+                    </Badge>
                   )}
                 </button>
               </li>

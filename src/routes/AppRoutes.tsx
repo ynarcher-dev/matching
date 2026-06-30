@@ -11,7 +11,7 @@ import { PlaceholderView } from '@/views/common/PlaceholderView';
 import { EventListView } from '@/views/admin/EventListView';
 import { EventDetailView } from '@/views/admin/EventDetailView';
 import { AiAllocationView } from '@/views/admin/AiAllocationView';
-import { UserListView } from '@/views/admin/UserListView';
+import { ParticipantDbView } from '@/views/admin/ParticipantDbView';
 import { StartupPortalView } from '@/views/startup/StartupPortalView';
 import { ExpertDashboardView } from '@/views/expert/ExpertDashboardView';
 import { ExpertHistoryView } from '@/views/expert/ExpertHistoryView';
@@ -32,7 +32,7 @@ export function AppRoutes() {
 
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
-          {/* 관리자 */}
+          {/* 관리자 (행사 범위 — 일반 운영자는 배정 행사만 RLS 로 자동 제한) */}
           <Route element={<RequireRole allow={['ADMIN']} />}>
             <Route path="/admin/events" element={<EventListView />} />
             <Route path="/admin/events/:eventId" element={<EventDetailView />} />
@@ -40,12 +40,15 @@ export function AppRoutes() {
               path="/admin/events/:eventId/ai-allocation"
               element={<AiAllocationView />}
             />
-            <Route path="/admin/users" element={<UserListView />} />
-            <Route path="/admin/settings" element={<NotificationSettingsView />} />
           </Route>
 
-          {/* 최고관리자 전용 */}
+          {/* 최고관리자 전용 (전역 스타트업/전문가 DB·전역 안내발송·운영자 관리) */}
           <Route element={<RequireSuperAdmin />}>
+            <Route path="/admin/startups" element={<ParticipantDbView role="STARTUP" />} />
+            <Route path="/admin/experts" element={<ParticipantDbView role="EXPERT" />} />
+            {/* 구 경로 호환: 분리 전 참가자 DB → 스타트업 DB 로 이관 */}
+            <Route path="/admin/users" element={<Navigate to="/admin/startups" replace />} />
+            <Route path="/admin/settings" element={<NotificationSettingsView />} />
             <Route path="/admin/operators" element={<OperatorListView />} />
           </Route>
 

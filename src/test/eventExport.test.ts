@@ -25,8 +25,18 @@ const expertUser: AssignableUser = {
   role: 'EXPERT',
   company_name: null,
   representative_name: null,
+  contact_name: null,
+  company_homepage: null,
   expert_organization: '벤처대학',
   expert_position: '교수',
+  email: null,
+  phone_number: null,
+  company_description: null,
+  expert_description: null,
+  field_ids: [],
+  proposal_file_url: null,
+  last_login_at: null,
+  created_at: '',
 };
 const startupUser: AssignableUser = {
   id: 'S1',
@@ -34,8 +44,18 @@ const startupUser: AssignableUser = {
   role: 'STARTUP',
   company_name: '에이콘',
   representative_name: '홍길동',
+  contact_name: null,
+  company_homepage: null,
   expert_organization: null,
   expert_position: null,
+  email: null,
+  phone_number: null,
+  company_description: null,
+  expert_description: null,
+  field_ids: [],
+  proposal_file_url: null,
+  last_login_at: null,
+  created_at: '',
 };
 const userById = new Map<string, AssignableUser>([
   ['X1', expertUser],
@@ -151,6 +171,7 @@ describe('buildCounselingSheet', () => {
     expert_id: 'X1',
     startup_id: 'S1',
     start_time: '2026-07-10T01:00:00.000Z',
+    end_time: '2026-07-10T01:30:00.000Z',
     session_status: 'COMPLETED',
     answers: [
       { question_id: 'q2', answer_text: null, answer_rating: 5, answer_selections: null },
@@ -178,6 +199,7 @@ describe('buildSurveySheet', () => {
     {
       id: 'sq1',
       event_id: 'E',
+      survey_scope: 'EVENT',
       target_role: 'STARTUP',
       question_type: 'RATING',
       title: '행사 만족도',

@@ -39,7 +39,7 @@ export function AllocationToolbar({
         </div>
         <Link
           to={`/admin/events/${eventId}`}
-          className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-semibold text-neutral-base transition-colors hover:bg-surface"
+          className="inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors px-3 py-1.5 text-sm border border-border bg-surface-raised text-neutral-base hover:bg-surface"
         >
           돌아가기
         </Link>
@@ -52,7 +52,7 @@ export function AllocationToolbar({
         {summary.fieldMismatch > 0 && (
           <>
             {' '}
-            <span className="text-amber-600">(분야 불일치 {summary.fieldMismatch}건)</span>
+            <span className="text-warning">(분야 불일치 {summary.fieldMismatch}건)</span>
           </>
         )}
         {summary.locked > 0 && (

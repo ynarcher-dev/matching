@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
+import type { ExpertResponse } from '@/lib/expertSurveyReport';
 import type { SurveyAnswerRow } from '@/types/satisfaction';
 
 /**
@@ -20,9 +21,10 @@ export interface ReportResponse {
 
 export const surveyReportKeys = {
   responses: (eventId: string) => ['survey-report', eventId, 'responses'] as const,
+  expertResponses: (eventId: string) => ['survey-report', eventId, 'expert-responses'] as const,
 };
 
-/** 이 행사의 모든 제출 응답(+답변)을 가져온다(제출 시각 내림차순). */
+/** 이 행사의 행사 만족도(EVENT 스코프) 응답(+답변)을 가져온다(제출 시각 내림차순). */
 export function useSurveyReport(eventId: string) {
   return useQuery<ReportResponse[]>({
     queryKey: surveyReportKeys.responses(eventId),
@@ -34,6 +36,7 @@ export function useSurveyReport(eventId: string) {
           'id,user_id,user_role,submitted_at,survey_answers(question_id,answer_text,answer_rating,answer_selections)',
         )
         .eq('event_id', eventId)
+        .eq('survey_scope', 'EVENT')
         .order('submitted_at', { ascending: false });
       if (error) throw error;
       return (
@@ -50,6 +53,44 @@ export function useSurveyReport(eventId: string) {
         id: r.id,
         user_id: r.user_id,
         user_role: r.user_role,
+        submitted_at: r.submitted_at,
+        answers: r.survey_answers ?? [],
+      }));
+    },
+  });
+}
+
+/** 이 행사의 전문가 만족도(EXPERT 스코프) 응답(+답변). 전문가별 집계는 lib/expertSurveyReport. */
+export function useExpertSurveyReport(eventId: string) {
+  return useQuery<ExpertResponse[]>({
+    queryKey: surveyReportKeys.expertResponses(eventId),
+    enabled: Boolean(eventId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('survey_responses')
+        .select(
+          'id,user_id,target_expert_id,slot_id,submitted_at,survey_answers(question_id,answer_text,answer_rating,answer_selections)',
+        )
+        .eq('event_id', eventId)
+        .eq('survey_scope', 'EXPERT')
+        .order('submitted_at', { ascending: false });
+      if (error) throw error;
+      return (
+        (data as
+          | {
+              id: string;
+              user_id: string;
+              target_expert_id: string;
+              slot_id: string;
+              submitted_at: string;
+              survey_answers: SurveyAnswerRow[] | null;
+            }[]
+          | null) ?? []
+      ).map((r) => ({
+        id: r.id,
+        user_id: r.user_id,
+        target_expert_id: r.target_expert_id,
+        slot_id: r.slot_id,
         submitted_at: r.submitted_at,
         answers: r.survey_answers ?? [],
       }));

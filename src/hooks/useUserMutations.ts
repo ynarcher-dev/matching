@@ -2,6 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { normalizePhone } from '@/schemas/authSchemas';
 import { userKeys } from '@/hooks/useUsers';
+import { proposalHistoryKeys } from '@/hooks/useProposalHistory';
+import { eventDetailKeys } from '@/hooks/useEventDetail';
 import {
   FILE_COLUMN,
   removeParticipantFile,
@@ -33,6 +35,26 @@ function toUserColumns(values: ParticipantFormValues) {
     expert_position: orNull(values.expert_position),
     expert_description: orNull(values.expert_description),
   };
+}
+
+/**
+ * 관리자 대행 소개서 변경 1건을 이력 타임라인에 적재한다(스타트업 전용, 0052).
+ * 업로드 주체(uploaded_by)는 stamp_proposal_upload 트리거가 current_app_user_id() 로 기록한다.
+ */
+async function recordProposalHistory(
+  userId: string,
+  action: 'UPLOAD' | 'REPLACE' | 'CLEAR',
+  filePath: string | null,
+  file: File | null,
+): Promise<void> {
+  const { error } = await supabase.from('proposal_uploads').insert({
+    user_id: userId,
+    action,
+    file_path: filePath,
+    file_name: file?.name ?? null,
+    file_size: file?.size ?? null,
+  });
+  if (error) throw new Error(`소개서 이력 기록에 실패했습니다: ${error.message}`);
 }
 
 /** 사용자 기본 분야(user_fields)를 선택분으로 교체한다(전체 삭제 후 INSERT). */
@@ -88,6 +110,7 @@ export function useSaveParticipant() {
       await replaceUserFields(userId, values.field_ids ?? []);
 
       // 3) Storage 파일(역할별 컬럼). 업로드/교체/삭제.
+      //    스타트업 소개서는 과거본을 보존(삭제 금지)하고 변경 이력을 타임라인에 적재한다(0052).
       const column = FILE_COLUMN[role];
       if (file) {
         const newPath = await uploadParticipantFile(role, userId, file);
@@ -96,7 +119,9 @@ export function useSaveParticipant() {
           .update({ [column]: newPath })
           .eq('id', userId);
         if (error) throw new Error(error.message);
-        if (currentFilePath && currentFilePath !== newPath) {
+        if (role === 'STARTUP') {
+          await recordProposalHistory(userId, currentFilePath ? 'REPLACE' : 'UPLOAD', newPath, file);
+        } else if (currentFilePath && currentFilePath !== newPath) {
           await removeParticipantFile(currentFilePath).catch(() => undefined);
         }
       } else if (removeFile && currentFilePath) {
@@ -105,12 +130,62 @@ export function useSaveParticipant() {
           .update({ [column]: null })
           .eq('id', userId);
         if (error) throw new Error(error.message);
-        await removeParticipantFile(currentFilePath).catch(() => undefined);
+        if (role === 'STARTUP') {
+          await recordProposalHistory(userId, 'CLEAR', null, null);
+        } else {
+          await removeParticipantFile(currentFilePath).catch(() => undefined);
+        }
       }
 
       return userId;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.all });
+      qc.invalidateQueries({ queryKey: proposalHistoryKeys.all });
+      qc.invalidateQueries({ queryKey: eventDetailKeys.assignable });
+    },
+  });
+}
+
+export interface SetParticipantFileInput {
+  userId: string;
+  role: ParticipantRole;
+  /** 새로 업로드할 파일(역할별 버킷). */
+  file: File;
+  /** 현재 저장된 파일 객체 경로(교체 시 이전 파일 정리에 사용). */
+  currentFilePath?: string | null;
+}
+
+/**
+ * 참가자 첨부 파일만 단독 업로드/교체 — 목록에서 관리자 대행 인라인 업로드(미업로드 즉시 올리기).
+ * Storage 업로드 → 역할별 컬럼 갱신, 경로가 바뀌면 이전 파일 정리.
+ * 업로드 주체/시각은 0046 트리거가 current_app_user_id() 로 자동 기록한다(관리자 대행).
+ */
+export function useSetParticipantFile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, role, file, currentFilePath }: SetParticipantFileInput) => {
+      const column = FILE_COLUMN[role];
+      const newPath = await uploadParticipantFile(role, userId, file);
+      const { error } = await supabase
+        .from('users')
+        .update({ [column]: newPath })
+        .eq('id', userId);
+      if (error) throw new Error(error.message);
+      if (role === 'STARTUP') {
+        // 과거본 보존 + 타임라인 이력 적재(삭제 금지).
+        await recordProposalHistory(userId, currentFilePath ? 'REPLACE' : 'UPLOAD', newPath, file);
+      } else if (currentFilePath && currentFilePath !== newPath) {
+        await removeParticipantFile(currentFilePath).catch(() => undefined);
+      }
+      return newPath;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.all });
+      qc.invalidateQueries({ queryKey: proposalHistoryKeys.all });
+      // 참가자 지정 표(참가 스타트업 지정)의 IR/소개서 인라인 업로드도 즉시 반영.
+      qc.invalidateQueries({ queryKey: eventDetailKeys.assignable });
+    },
   });
 }
 
@@ -125,7 +200,10 @@ export function useSoftDeleteUser() {
         .eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.all });
+      qc.invalidateQueries({ queryKey: eventDetailKeys.assignable });
+    },
   });
 }
 
@@ -142,7 +220,10 @@ export function useBulkCreateUsers() {
       if (error) throw mapUserWriteError(error);
       return rows.length;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.all });
+      qc.invalidateQueries({ queryKey: eventDetailKeys.assignable });
+    },
   });
 }
 
@@ -157,7 +238,10 @@ export function useInvalidateSessions() {
       });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.all });
+      qc.invalidateQueries({ queryKey: eventDetailKeys.assignable });
+    },
   });
 }
 

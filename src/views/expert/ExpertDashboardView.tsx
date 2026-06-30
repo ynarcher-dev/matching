@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { FullScreenLoader } from '@/components/common/FullScreenLoader';
+import { Tabs } from '@/components/common/Tabs';
 import { EventStatusBadge } from '@/components/admin/EventStatusBadge';
 import { ActiveSessionCard } from '@/components/expert/ActiveSessionCard';
 import { ExpertScheduleList } from '@/components/expert/ExpertScheduleList';
 import { CounselingLogModal } from '@/components/expert/CounselingLogModal';
-import { SatisfactionPanel } from '@/components/startup/SatisfactionPanel';
 import { useAuthStore } from '@/stores/authStore';
 import { displayName } from '@/lib/labels';
 import { formatRange } from '@/lib/datetime';
@@ -38,6 +38,10 @@ export function ExpertDashboardView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const events = useMemo(() => eventsQ.data ?? [], [eventsQ.data]);
+  const tabOptions = useMemo(
+    () => events.map((e) => ({ value: e.id, label: e.title })),
+    [events],
+  );
   // 기본 선택: 진행(PROGRESS) 행사 우선, 없으면 첫 행사.
   const event = useMemo<EventRow | undefined>(() => {
     if (selectedId) return events.find((e) => e.id === selectedId) ?? events[0];
@@ -101,7 +105,6 @@ export function ExpertDashboardView() {
   }
 
   const inProgress = event.status === 'PROGRESS';
-  const finished = event.status === 'FINISHED';
 
   return (
     <div className="flex flex-col gap-5">
@@ -112,25 +115,11 @@ export function ExpertDashboardView() {
       </Card>
 
       {events.length > 1 && (
-        <div className="flex flex-wrap gap-1.5">
-          {events.map((e) => {
-            const active = e.id === event.id;
-            return (
-              <button
-                key={e.id}
-                type="button"
-                onClick={() => setSelectedId(e.id)}
-                className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors ${
-                  active
-                    ? 'border-brand bg-brand text-white'
-                    : 'border-border bg-white text-neutral-base hover:bg-surface'
-                }`}
-              >
-                {e.title}
-              </button>
-            );
-          })}
-        </div>
+        <Tabs
+          value={eventId}
+          options={tabOptions}
+          onChange={setSelectedId}
+        />
       )}
 
       <Card className="flex flex-col gap-2 p-5">
@@ -189,8 +178,6 @@ export function ExpertDashboardView() {
         timezone={event.timezone}
         onWriteLog={inProgress ? (s) => setLogTarget(s) : undefined}
       />
-
-      {finished && <SatisfactionPanel eventId={eventId} role="EXPERT" />}
 
       <CounselingLogModal
         open={Boolean(logTarget)}

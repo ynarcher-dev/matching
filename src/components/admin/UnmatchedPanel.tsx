@@ -40,7 +40,7 @@ export function UnmatchedPanel({ proposals, userById }: UnmatchedPanelProps) {
                 <span className="text-sm font-medium text-neutral-base">
                   {u ? participantLabel(u) : '(알 수 없는 스타트업)'}
                 </span>
-                <span className="rounded-full bg-danger-surface px-2.5 py-0.5 text-xs font-semibold text-brand">
+                <span className="rounded-md bg-danger-surface px-2.5 py-0.5 text-xs font-semibold text-brand">
                   {p.unmatched_reason ?? '사유 미상'}
                 </span>
               </li>

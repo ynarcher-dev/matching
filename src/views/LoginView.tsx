@@ -7,6 +7,7 @@ import { RoleTabs, type LoginTab } from '@/components/auth/RoleTabs';
 import { ParticipantLoginForm } from '@/components/auth/ParticipantLoginForm';
 import { OperatorLoginForm } from '@/components/auth/OperatorLoginForm';
 import { Card } from '@/components/common/Card';
+import { Logo } from '@/components/common/Logo';
 
 const TAB_GUIDE: Record<LoginTab, string> = {
   STARTUP: '등록한 이름과 휴대전화 번호로 로그인하세요.',
@@ -34,9 +35,7 @@ export function LoginView() {
     <main className="flex min-h-screen flex-col items-center justify-center bg-surface p-4">
       <div className="w-full max-w-sm">
         <header className="mb-6 text-center">
-          <span className="inline-block rounded-lg bg-brand px-3 py-1 text-lg font-bold text-white">
-            YNA
-          </span>
+          <Logo className="mx-auto h-9 w-auto" />
           <h1 className="mt-3 text-2xl font-bold text-neutral-base">비즈니스 매칭</h1>
           <p className="mt-1 text-sm text-neutral-base">행사 운영·상담 매칭 시스템</p>
         </header>

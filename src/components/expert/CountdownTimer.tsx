@@ -19,7 +19,7 @@ export function CountdownTimer({ endIso }: { endIso: string }) {
   const warn = isCountdownWarning(ms);
 
   const tone = warn
-    ? 'animate-pulse text-red-600'
+    ? 'animate-pulse text-danger'
     : ended
       ? 'text-neutral-base/40'
       : 'text-neutral-base';

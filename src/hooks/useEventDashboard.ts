@@ -104,3 +104,28 @@ export function useMarkNoShow(eventId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: eventDetailKeys.slots(eventId) }),
   });
 }
+
+/**
+ * 진행 상태 직접 설정 — admin_set_session_status RPC (0051).
+ * 관리/스태프 권한자가 진행 대시보드에서 대기중/진행중/완료를 자유 전환(노쇼 되돌리기 포함).
+ * 노쇼는 mark_no_show(사유 필수), 취소는 cancel_session 으로 별도 처리한다.
+ */
+export function useSetSessionStatus(eventId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      slotId,
+      status,
+    }: {
+      slotId: string;
+      status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED';
+    }) => {
+      const { error } = await supabase.rpc('admin_set_session_status', {
+        p_slot_id: slotId,
+        p_status: status,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: eventDetailKeys.slots(eventId) }),
+  });
+}

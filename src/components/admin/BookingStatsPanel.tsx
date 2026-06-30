@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
+import { StatBox } from '@/components/common/StatBox';
 import { BookingScheduleTable } from '@/components/admin/BookingScheduleTable';
-import { computeBookingStats, unbookedStartupIds } from '@/lib/booking';
-import { participantLabel } from '@/lib/labels';
+import { CompanyBookingStatus } from '@/components/admin/CompanyBookingStatus';
+import { ForceBookingModal } from '@/components/admin/ForceBookingModal';
+import { computeBookingStats } from '@/lib/booking';
 import type {
   AssignableUser,
   EventParticipantRow,
@@ -12,38 +14,18 @@ import type {
   MatchingSlotRow,
 } from '@/types/eventDetail';
 
-/** 5% 단위 정적 width 클래스(인라인 스타일 금지 대응 — Tailwind JIT 가 리터럴을 수집). */
-const BAR_WIDTH_CLASS: Record<number, string> = {
-  0: 'w-[0%]',
-  5: 'w-[5%]',
-  10: 'w-[10%]',
-  15: 'w-[15%]',
-  20: 'w-[20%]',
-  25: 'w-[25%]',
-  30: 'w-[30%]',
-  35: 'w-[35%]',
-  40: 'w-[40%]',
-  45: 'w-[45%]',
-  50: 'w-[50%]',
-  55: 'w-[55%]',
-  60: 'w-[60%]',
-  65: 'w-[65%]',
-  70: 'w-[70%]',
-  75: 'w-[75%]',
-  80: 'w-[80%]',
-  85: 'w-[85%]',
-  90: 'w-[90%]',
-  95: 'w-[95%]',
-  100: 'w-[100%]',
-};
-
 interface BookingStatsPanelProps {
-  eventId: string;
   slots: MatchingSlotRow[];
   participants: EventParticipantRow[];
   tables: EventTable[];
   userById: Map<string, AssignableUser>;
   timezone: string;
+  /** 행사별 스타트업당 최대 신청 횟수(기업별 배치 현황 진행도). */
+  maxSessions: number;
+  /** 강제 배정에 필요한 행사 ID — 빈 슬롯 클릭 배정을 켜려면 함께 전달. */
+  eventId?: string;
+  /** 빈 슬롯 클릭 → 강제 배정 허용 여부(관리 권한 && 미잠금). */
+  forceAssignEnabled?: boolean;
 }
 
 /**
@@ -51,63 +33,77 @@ interface BookingStatsPanelProps {
  * 예약율 프로그레스 + 예약/미예약 스타트업 수 + 미예약 명단(긴급 알림 대상).
  */
 export function BookingStatsPanel({
-  eventId,
   slots,
   participants,
   tables,
   userById,
   timezone,
+  maxSessions,
+  eventId,
+  forceAssignEnabled = false,
 }: BookingStatsPanelProps) {
+  // 강제 배정 모달: open + 미리 선택할 슬롯(빈 슬롯 클릭) / 스타트업(기업별 배치 현황 + 배정).
+  const [force, setForce] = useState<{
+    open: boolean;
+    slot: MatchingSlotRow | null;
+    startupId: string | null;
+  }>({ open: false, slot: null, startupId: null });
   const startupIds = useMemo(
     () => participants.filter((p) => p.participant_type === 'STARTUP').map((p) => p.user_id),
     [participants],
   );
-  const stats = useMemo(() => computeBookingStats(slots, startupIds), [slots, startupIds]);
-  const unbooked = useMemo(
-    () => unbookedStartupIds(slots, startupIds),
-    [slots, startupIds],
+  const stats = useMemo(
+    () => computeBookingStats(slots, startupIds, maxSessions),
+    [slots, startupIds, maxSessions],
   );
 
-  const ratePct = Math.round(stats.bookingRate * 100);
-  // 인라인 스타일 금지 → 5% 버킷의 정적 Tailwind width 클래스로 막대를 그린다.
-  const barWidth = BAR_WIDTH_CLASS[Math.round(ratePct / 5) * 5];
+  // 강제 배정 후보 스타트업(빈 슬롯 클릭 모달용).
+  const startups = useMemo(
+    () =>
+      participants
+        .filter((p) => p.participant_type === 'STARTUP')
+        .map((p) => userById.get(p.user_id))
+        .filter((u): u is AssignableUser => Boolean(u)),
+    [participants, userById],
+  );
+
+  const canForceAssign = forceAssignEnabled && Boolean(eventId);
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="flex flex-col gap-4 p-5">
+      <Card className="flex flex-col gap-5 p-5">
+        {/* 제목 좌측 · 배치 액션은 카드 헤더 우측(권한 미달 시 숨김). 카드 내부 표준 버튼 크기(md). */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold text-neutral-base">예약 현황</h2>
-          <Link to={`/admin/events/${eventId}/ai-allocation`}>
-            <Button variant="outline">AI 자동배치로 이동</Button>
-          </Link>
+          {canForceAssign && eventId && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Link to={`/admin/events/${eventId}/ai-allocation`}>
+                <Button variant="outline">AI배치</Button>
+              </Link>
+              <Button onClick={() => setForce({ open: true, slot: null, startupId: null })}>
+                강제 배치
+              </Button>
+            </div>
+          )}
         </div>
 
         {stats.totalSlots === 0 ? (
-          <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-neutral-base/60">
+          <p className="rounded-xl border border-dashed border-border px-3 py-8 text-center text-sm text-neutral-base/60">
             아직 생성된 매칭 슬롯이 없습니다. 배치 단계에서 슬롯을 생성하면 예약 현황이 표시됩니다.
           </p>
         ) : (
-          <>
-            <div>
-              <div className="mb-1 flex items-center justify-between text-sm">
-                <span className="font-semibold text-neutral-base">슬롯 예약율</span>
-                <span className="font-bold text-neutral-base">{ratePct}%</span>
-              </div>
-              <div className="h-3 w-full overflow-hidden rounded-full bg-surface">
-                <div className={`h-full rounded-full bg-brand transition-all ${barWidth}`} />
-              </div>
-              <p className="mt-1 text-xs text-neutral-base/60">
-                예약 {stats.bookedSlots} / 전체 {stats.totalSlots} 슬롯 (빈 슬롯 {stats.emptySlots})
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatBox label="전체 슬롯" value={stats.totalSlots} />
-              <StatBox label="예약 슬롯" value={stats.bookedSlots} />
-              <StatBox label="예약 완료 기업" value={stats.bookedStartupCount} />
-              <StatBox label="미예약 기업" value={stats.unbookedStartupCount} tone="warn" />
-            </div>
-          </>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <StatBox label="전체 슬롯" value={stats.totalSlots} />
+            <StatBox label="참가기업 수" value={stats.startupCount} />
+            <StatBox label="기업당 진행 횟수" value={stats.maxSessions} />
+            <StatBox label="총 진행세션" value={stats.requiredSessions} />
+            <StatBox label="예약 완료된 세션" value={stats.bookedSlots} />
+            <StatBox
+              label={`잔여 세션 (${stats.slotBalance < 0 ? '슬롯 추가 필요' : '예약 가능'})`}
+              value={stats.slotBalance > 0 ? `+${stats.slotBalance}` : stats.slotBalance}
+              tone={stats.slotBalance < 0 ? 'warning' : 'success'}
+            />
+          </div>
         )}
       </Card>
 
@@ -117,59 +113,42 @@ export function BookingStatsPanel({
         tables={tables}
         userById={userById}
         timezone={timezone}
+        onSelectEmptySlot={
+          canForceAssign ? (slot) => setForce({ open: true, slot, startupId: null }) : undefined
+        }
       />
 
-      <Card className="flex flex-col gap-3 p-5">
-        <h3 className="text-base font-bold text-neutral-base">미예약 스타트업</h3>
-        {unbooked.length === 0 ? (
-          <p className="text-sm text-neutral-base/60">
-            {startupIds.length === 0
-              ? '지정된 스타트업이 없습니다.'
-              : '모든 스타트업이 1건 이상 예약했습니다.'}
-          </p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-border rounded-xl border border-border">
-            {unbooked.map((id) => {
-              const u = userById.get(id);
-              return (
-                <li
-                  key={id}
-                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5"
-                >
-                  <span className="text-sm font-medium text-neutral-base">
-                    {u ? participantLabel(u) : '(알 수 없는 사용자)'}
-                  </span>
-                  <span
-                    className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-neutral-base/50"
-                    title="알림 발송은 Phase 7 에서 연동됩니다."
-                  >
-                    알림 재발송(준비 중)
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
-    </div>
-  );
-}
+      {eventId && (
+        <CompanyBookingStatus
+          eventId={eventId}
+          slots={slots}
+          participants={participants}
+          userById={userById}
+          timezone={timezone}
+          maxSessions={maxSessions}
+          canManage={canForceAssign}
+          onAssign={
+            canForceAssign
+              ? (startupId) => setForce({ open: true, slot: null, startupId })
+              : undefined
+          }
+        />
+      )}
 
-function StatBox({
-  label,
-  value,
-  tone = 'base',
-}: {
-  label: string;
-  value: number;
-  tone?: 'base' | 'warn';
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-surface/40 px-3 py-3 text-center">
-      <p className={`text-2xl font-bold ${tone === 'warn' ? 'text-brand' : 'text-neutral-base'}`}>
-        {value}
-      </p>
-      <p className="mt-0.5 text-xs font-medium text-neutral-base/60">{label}</p>
+      {canForceAssign && eventId && (
+        <ForceBookingModal
+          open={force.open}
+          onClose={() => setForce((s) => ({ ...s, open: false }))}
+          eventId={eventId}
+          slots={slots}
+          startups={startups}
+          userById={userById}
+          tables={tables}
+          timezone={timezone}
+          initialSlotId={force.slot?.id ?? null}
+          initialStartupId={force.startupId}
+        />
+      )}
     </div>
   );
 }

@@ -1,8 +1,11 @@
+import type { ReactNode } from 'react';
 import { useMemo } from 'react';
+import { Badge } from '@/components/common/Badge';
 import { Card } from '@/components/common/Card';
 import { buildBookingSchedule } from '@/lib/booking';
 import { formatDateTime } from '@/lib/datetime';
 import { companyName, BOOKING_TYPE_LABELS } from '@/lib/labels';
+import type { Tone } from '@/lib/tone';
 import type {
   AssignableUser,
   BookingType,
@@ -17,14 +20,18 @@ interface BookingScheduleTableProps {
   tables: EventTable[];
   userById: Map<string, AssignableUser>;
   timezone: string;
+  /** 빈 슬롯 클릭 시 호출(강제 배정 모달 열기). 없으면 빈 슬롯은 비활성 표시. */
+  onSelectEmptySlot?: (slot: MatchingSlotRow) => void;
+  /** 제목 우측 액션 버튼(강제 배치 · AI배치 등). */
+  headerActions?: ReactNode;
 }
 
-/** 예약 경로별 셀 색(page_admin_event_detail.md §3.1 — 수동=민트·AI=보라·강제=주황). */
-const CELL_STYLE: Record<BookingType, { tint: string; pill: string }> = {
-  NONE: { tint: '', pill: '' },
-  MANUAL: { tint: 'bg-emerald-50', pill: 'bg-emerald-100 text-emerald-700' },
-  AUTO_AI: { tint: 'bg-violet-50', pill: 'bg-violet-100 text-violet-700' },
-  ADMIN_FORCE: { tint: 'bg-orange-50', pill: 'bg-orange-100 text-orange-700' },
+/** 예약 경로별 태그 tone(page_admin_event_detail.md §3.1 — 수동=success·AI=ai·강제=warning, 9-A tone). */
+const TYPE_TONE: Record<BookingType, Tone> = {
+  NONE: 'muted',
+  MANUAL: 'success',
+  AUTO_AI: 'ai',
+  ADMIN_FORCE: 'warning',
 };
 
 /** 한 전문가 행의 표시 정보(테이블·이름·소속). */
@@ -46,6 +53,8 @@ export function BookingScheduleTable({
   tables,
   userById,
   timezone,
+  onSelectEmptySlot,
+  headerActions,
 }: BookingScheduleTableProps) {
   const { columns, byExpert } = useMemo(() => buildBookingSchedule(slots), [slots]);
 
@@ -88,12 +97,20 @@ export function BookingScheduleTable({
 
   return (
     <Card className="flex flex-col gap-3 p-5">
+      {/* 제목 좌측 · 경로 범례(+액션)는 우측 정렬 — 기업별 배치 현황과 동일한 헤더 레이아웃. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold text-neutral-base">예약 배치 현황</h3>
-        <div className="flex flex-wrap gap-2 text-[11px]">
-          <Legend className="bg-emerald-100 text-emerald-700" label="수동" />
-          <Legend className="bg-violet-100 text-violet-700" label="AI" />
-          <Legend className="bg-orange-100 text-orange-700" label="강제" />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge tone="success" size="11">
+            {BOOKING_TYPE_LABELS.MANUAL}
+          </Badge>
+          <Badge tone="ai" size="11">
+            {BOOKING_TYPE_LABELS.AUTO_AI}
+          </Badge>
+          <Badge tone="warning" size="11">
+            {BOOKING_TYPE_LABELS.ADMIN_FORCE}
+          </Badge>
+          {headerActions}
         </div>
       </div>
 
@@ -155,7 +172,7 @@ export function BookingScheduleTable({
                           key={c}
                           className="w-[96px] border-r border-border p-1 align-middle last:border-r-0"
                         >
-                          <Cell slot={slot} startup={su} />
+                          <Cell slot={slot} startup={su} onSelectEmptySlot={onSelectEmptySlot} />
                         </td>
                       );
                     })}
@@ -174,35 +191,42 @@ export function BookingScheduleTable({
 function Cell({
   slot,
   startup,
+  onSelectEmptySlot,
 }: {
   slot: MatchingSlotRow | undefined;
   startup: AssignableUser | undefined;
+  onSelectEmptySlot?: (slot: MatchingSlotRow) => void;
 }) {
   if (!slot) return <span className="block text-center text-neutral-base/15">·</span>;
   if (!slot.startup_id) {
+    // 빈 슬롯: 강제 배정 권한이 있으면 클릭해 모달을 연다.
+    if (onSelectEmptySlot) {
+      return (
+        <button
+          type="button"
+          onClick={() => onSelectEmptySlot(slot)}
+          className="block w-full rounded-md border border-dashed border-border py-1.5 text-xs font-medium text-neutral-base/45 transition-colors hover:border-brand hover:bg-danger-surface hover:text-brand"
+          title="강제 배정"
+        >
+          + 배정
+        </button>
+      );
+    }
     return <span className="block py-1 text-center text-xs text-neutral-base/35">빈 슬롯</span>;
   }
-  const style = CELL_STYLE[slot.booking_type];
   return (
-    <div className={`rounded-md px-1 py-1 text-center ${style.tint}`}>
-      <span
-        className={`inline-block rounded-full px-1.5 py-0.5 text-[11px] font-bold ${style.pill}`}
-      >
+    <div className="flex flex-col items-center gap-1.5 px-1 py-1.5 text-center">
+      <Badge tone={TYPE_TONE[slot.booking_type]} size="11">
         {BOOKING_TYPE_LABELS[slot.booking_type]}
-      </span>
-      <p className="mt-0.5 break-keep text-xs font-bold leading-tight text-neutral-base">
+      </Badge>
+      <p className="break-keep text-xs font-bold leading-tight text-neutral-base">
         {startup ? companyName(startup) : '(알 수 없음)'}
       </p>
+      {startup?.representative_name && (
+        <p className="break-keep text-[11px] font-medium leading-tight text-neutral-base/60">
+          {startup.representative_name}
+        </p>
+      )}
     </div>
-  );
-}
-
-function Legend({ className, label }: { className: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1 text-neutral-base/70">
-      <span className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold ${className}`}>
-        {label}
-      </span>
-    </span>
   );
 }

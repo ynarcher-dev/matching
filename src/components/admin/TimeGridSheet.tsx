@@ -2,16 +2,17 @@ import { useMemo } from 'react';
 import { buildBookingSchedule } from '@/lib/booking';
 import { attendanceStatusFor } from '@/lib/attendance';
 import { formatDateTime } from '@/lib/datetime';
+import { AttendanceSegmentedControl } from '@/components/common/AttendanceSegmentedControl';
+import { BADGE_TONE, SOLID_TONE, type Tone } from '@/lib/tone';
 import {
   companyName,
-  BOOKING_TYPE_LABELS,
   PARTICIPANT_ROLE_LABELS,
   SESSION_STATUS_LABELS,
+  SESSION_STATUS_TONE,
 } from '@/lib/labels';
 import type { AttendanceLogRow, AttendanceStatus } from '@/types/attendance';
 import type {
   AssignableUser,
-  BookingType,
   EventParticipantRow,
   EventTable,
   MatchingSlotRow,
@@ -34,23 +35,32 @@ interface TimeGridSheetProps {
   onSetExpert: (slot: MatchingSlotRow, next: AttendanceStatus | null) => void;
   /** 노쇼 처리(사유 모달 오픈). */
   onMarkNoShow: (slot: MatchingSlotRow) => void;
+  /** 진행 상태 직접 설정(대기중/진행중/완료, 관리/스태프). */
+  onSetSessionStatus: (slot: MatchingSlotRow, status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED') => void;
 }
 
-/** 예약 경로별 셀 배경/태그 색(page_admin_event_detail.md §3.1 — 수동=민트·AI=보라·강제=주황). */
-const CELL_STYLE: Record<BookingType, { tint: string; pill: string }> = {
-  NONE: { tint: '', pill: '' },
-  MANUAL: { tint: 'bg-emerald-50', pill: 'bg-emerald-100 text-emerald-700' },
-  AUTO_AI: { tint: 'bg-violet-50', pill: 'bg-violet-100 text-violet-700' },
-  ADMIN_FORCE: { tint: 'bg-orange-50', pill: 'bg-orange-100 text-orange-700' },
+/**
+ * 셀 배경 = 세션 진행 상태(진행현황) 기준 (page_admin_event_detail.md §3.1).
+ * 예약 경로(수동/AI/강제) 대신 진행 상태로 셀 색을 맞춘다(대기=흰색·진행중=info·완료=success·노쇼=danger).
+ */
+const SESSION_CELL_TINT: Record<SessionStatus, string> = {
+  WAITING: 'bg-surface-raised',
+  IN_PROGRESS: 'bg-info-surface',
+  COMPLETED: 'bg-success-surface',
+  NO_SHOW: 'bg-danger-surface',
+  CANCELLED: 'bg-muted',
 };
 
-/** 세션 진행 상태 배지 색(page_admin_event_detail.md §3.1 — 대기/진행/완료). */
+/**
+ * 세션 진행 상태 배지 색 = SESSION_STATUS_TONE 의 읽기용(BADGE_TONE) 변형.
+ * 범례·진행 버튼과 같은 tone 을 공유한다(대기/진행/완료/노쇼 = 같은 색).
+ */
 const STATUS_TONE: Record<SessionStatus, string> = {
-  WAITING: 'bg-neutral-100 text-neutral-600',
-  IN_PROGRESS: 'bg-blue-100 text-blue-700',
-  COMPLETED: 'bg-emerald-100 text-emerald-700',
-  NO_SHOW: 'bg-red-100 text-red-700',
-  CANCELLED: 'bg-neutral-100 text-neutral-400 line-through',
+  WAITING: BADGE_TONE[SESSION_STATUS_TONE.WAITING],
+  IN_PROGRESS: BADGE_TONE[SESSION_STATUS_TONE.IN_PROGRESS],
+  COMPLETED: BADGE_TONE[SESSION_STATUS_TONE.COMPLETED],
+  NO_SHOW: BADGE_TONE[SESSION_STATUS_TONE.NO_SHOW],
+  CANCELLED: `${BADGE_TONE[SESSION_STATUS_TONE.CANCELLED]} line-through`,
 };
 
 interface ExpertRow {
@@ -62,9 +72,9 @@ interface ExpertRow {
 
 /**
  * 실시간 진행 타임그리드 (page_admin_event_detail.md §3.1, 설계 §4 TimeGridSheet).
- * 행=전문가(테이블·이름·소속), 열=시작시각. 셀=[경로][세션상태] 배지 + 기업명 + 출석.
- * 스타트업 출석은 관리자가 원클릭 토글, 전문가 출석은 표시만(본인만 체크 가능).
- * 예약 배치 표(BookingScheduleTable)와 셀 디자인을 공유하되 진행·출석 조작을 더한다.
+ * 행=전문가(테이블·이름·소속), 열=시작시각. 셀=진행 상태 배지 + 기업명·대표자명 + 출석 + 진행 액션.
+ * 셀 배경색은 진행 상태(진행현황) 기준. 스타트업·전문가 출석은 관리/스태프가 원클릭 처리하고,
+ * 대기중 세션은 [상담 시작]으로 진행중 전환(0050 대리 허용). 완료는 전문가 상담일지 제출로 처리.
  */
 export function TimeGridSheet({
   slots,
@@ -78,6 +88,7 @@ export function TimeGridSheet({
   onSetStartup,
   onSetExpert,
   onMarkNoShow,
+  onSetSessionStatus,
 }: TimeGridSheetProps) {
   const { columns, byExpert } = useMemo(() => buildBookingSchedule(slots), [slots]);
 
@@ -186,6 +197,7 @@ export function TimeGridSheet({
                         onSetStartup={onSetStartup}
                         onSetExpert={onSetExpert}
                         onMarkNoShow={onMarkNoShow}
+                        onSetSessionStatus={onSetSessionStatus}
                       />
                     </td>
                   );
@@ -199,7 +211,7 @@ export function TimeGridSheet({
   );
 }
 
-/** 한 칸: 진행 배지 + 기업명 + 전문가/스타트업 출석. */
+/** 한 칸: 진행 상태 배지 + 기업명/대표자명 + 전문가/스타트업 출석 + 진행 액션. */
 function GridCell({
   slot,
   userById,
@@ -209,6 +221,7 @@ function GridCell({
   onSetStartup,
   onSetExpert,
   onMarkNoShow,
+  onSetSessionStatus,
 }: {
   slot: MatchingSlotRow | undefined;
   userById: Map<string, AssignableUser>;
@@ -218,6 +231,7 @@ function GridCell({
   onSetStartup: (slot: MatchingSlotRow, next: AttendanceStatus | null) => void;
   onSetExpert: (slot: MatchingSlotRow, next: AttendanceStatus | null) => void;
   onMarkNoShow: (slot: MatchingSlotRow) => void;
+  onSetSessionStatus: (slot: MatchingSlotRow, status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED') => void;
 }) {
   if (!slot) return <span className="block text-center text-neutral-base/15">·</span>;
   if (!slot.startup_id) {
@@ -225,115 +239,118 @@ function GridCell({
   }
 
   const startup = userById.get(slot.startup_id);
-  const style = CELL_STYLE[slot.booking_type];
   const expertStatus = attendanceStatusFor(attendance, slot.id, slot.expert_id);
   const startupStatus = attendanceStatusFor(attendance, slot.id, slot.startup_id);
-  const canNoShow =
-    !locked && (slot.session_status === 'WAITING' || slot.session_status === 'IN_PROGRESS');
+  const status = slot.session_status;
+  // 노쇼는 대기/진행 상태에서만 설정 가능(mark_no_show 가드). 그 외는 대기/진행/완료로 되돌려서.
+  const noShowSettable = status === 'WAITING' || status === 'IN_PROGRESS';
 
   return (
-    <div className={`flex flex-col gap-1 rounded-md px-1 py-1.5 ${style.tint}`}>
-      <div className="flex flex-wrap justify-center gap-0.5">
+    <div className={`flex flex-col gap-1 rounded-md px-1 py-1.5 ${SESSION_CELL_TINT[slot.session_status]}`}>
+      <div className="flex justify-center">
         <span
-          className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold ${style.pill}`}
-        >
-          {BOOKING_TYPE_LABELS[slot.booking_type]}
-        </span>
-        <span
-          className={`inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold ${STATUS_TONE[slot.session_status]}`}
+          className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold ${STATUS_TONE[slot.session_status]}`}
         >
           {SESSION_STATUS_LABELS[slot.session_status]}
         </span>
       </div>
 
-      <p className="break-keep text-center text-xs font-bold leading-tight text-neutral-base">
-        {startup ? companyName(startup) : '(알 수 없음)'}
-      </p>
+      <div className="text-center leading-tight">
+        <p className="break-keep text-xs font-bold text-neutral-base">
+          {startup ? companyName(startup) : '(알 수 없음)'}
+        </p>
+        {startup?.representative_name && (
+          <p className="break-keep text-[10px] text-neutral-base/60">
+            {startup.representative_name}
+          </p>
+        )}
+      </div>
 
       <div className="flex flex-col items-stretch gap-1">
-        <AttendanceControl
+        <AttendanceSegmentedControl
           label={PARTICIPANT_ROLE_LABELS.EXPERT}
           status={expertStatus}
           disabled={locked || pending}
-          onSelect={(next) => onSetExpert(slot, next)}
+          onChange={(next) => onSetExpert(slot, next)}
+          size="sm"
+          layout="inline"
+          showText={false}
         />
-        <AttendanceControl
+        <AttendanceSegmentedControl
           label={PARTICIPANT_ROLE_LABELS.STARTUP}
           status={startupStatus}
           disabled={locked || pending}
-          onSelect={(next) => onSetStartup(slot, next)}
+          onChange={(next) => onSetStartup(slot, next)}
+          size="sm"
+          layout="inline"
+          showText={false}
         />
       </div>
 
-      {canNoShow && (
-        <button
-          type="button"
-          disabled={pending}
+      {/* 진행 상태 직접 제어(대기/진행/완료/노쇼) — 2×2 동일 크기 버튼. 관리자가 자유 전환. */}
+      <div className="grid grid-cols-2 gap-1">
+        <StatusButton
+          label="대기"
+          tone={SESSION_STATUS_TONE.WAITING}
+          active={status === 'WAITING'}
+          disabled={locked || pending}
+          onClick={() => onSetSessionStatus(slot, 'WAITING')}
+        />
+        <StatusButton
+          label="진행"
+          tone={SESSION_STATUS_TONE.IN_PROGRESS}
+          active={status === 'IN_PROGRESS'}
+          disabled={locked || pending}
+          onClick={() => onSetSessionStatus(slot, 'IN_PROGRESS')}
+        />
+        <StatusButton
+          label="완료"
+          tone={SESSION_STATUS_TONE.COMPLETED}
+          active={status === 'COMPLETED'}
+          disabled={locked || pending}
+          onClick={() => onSetSessionStatus(slot, 'COMPLETED')}
+        />
+        <StatusButton
+          label="노쇼"
+          tone={SESSION_STATUS_TONE.NO_SHOW}
+          active={status === 'NO_SHOW'}
+          // 노쇼는 대기/진행에서만 새로 설정 가능(사유 모달). 완료/노쇼면 비활성.
+          disabled={locked || pending || !noShowSettable}
           onClick={() => onMarkNoShow(slot)}
-          className="rounded-md border border-border px-1 py-0.5 text-[10px] font-semibold text-brand transition-colors hover:bg-danger-surface disabled:opacity-50"
-        >
-          노쇼 처리
-        </button>
-      )}
-    </div>
-  );
-}
-
-/** 출석 세그먼트 한 칸 정의(미정/출석/불참). */
-const ATTENDANCE_SEGMENTS: {
-  value: AttendanceStatus | null;
-  mark: string;
-  title: string;
-  activeTone: string;
-}[] = [
-  { value: null, mark: '–', title: '미정', activeTone: 'bg-neutral-300 text-neutral-700' },
-  { value: 'PRESENT', mark: '✓', title: '출석', activeTone: 'bg-emerald-500 text-white' },
-  { value: 'ABSENT', mark: '✕', title: '불참', activeTone: 'bg-red-500 text-white' },
-];
-
-/**
- * 출석 세그먼트 컨트롤 [미정 | 출석 | 불참]. 현재 상태가 강조되고 나머지는 회색.
- * 실수로 눌러도 '미정'을 다시 선택해 기본 상태로 되돌릴 수 있다.
- */
-function AttendanceControl({
-  label,
-  status,
-  onSelect,
-  disabled,
-}: {
-  label: string;
-  status: AttendanceStatus | null;
-  onSelect: (next: AttendanceStatus | null) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-1">
-      <span className="w-10 shrink-0 text-[10px] font-semibold text-neutral-base/70">{label}</span>
-      <div className="flex flex-1 overflow-hidden rounded-md border border-border">
-        {ATTENDANCE_SEGMENTS.map((seg, i) => {
-          const active = status === seg.value;
-          return (
-            <button
-              key={seg.title}
-              type="button"
-              disabled={disabled || active}
-              title={seg.title}
-              aria-label={`${label} ${seg.title}`}
-              aria-pressed={active}
-              onClick={() => onSelect(seg.value)}
-              className={`flex-1 px-1 py-0.5 text-[11px] font-bold transition-colors ${
-                i > 0 ? 'border-l border-border' : ''
-              } ${
-                active
-                  ? seg.activeTone
-                  : 'bg-white text-neutral-base/35 hover:bg-surface disabled:opacity-100'
-              }`}
-            >
-              {seg.mark}
-            </button>
-          );
-        })}
+        />
       </div>
     </div>
   );
 }
+
+/** 진행 상태 2×2 그리드의 단일 버튼(활성=tone 채움, 비활성=흰색 outline). */
+function StatusButton({
+  label,
+  tone,
+  active,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  tone: Tone;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      disabled={disabled || active}
+      onClick={onClick}
+      className={`rounded-md px-1 py-1 text-[10px] font-bold transition-colors disabled:cursor-default ${
+        active
+          ? SOLID_TONE[tone]
+          : 'border border-border bg-surface-raised text-neutral-base/70 hover:bg-surface disabled:opacity-50'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+

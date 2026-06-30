@@ -2,7 +2,7 @@
 
 이 문서는 비즈니스 매칭 시스템의 구현 진척도를 시각적으로 추적하기 위한 마일스톤 체크리스트입니다. 각 태스크 완료 시마다 상태를 업데이트합니다.
 
-## 전체 진척도: `[#####################=] 97%`
+## 전체 진척도: `[######################] 99%`
 
 > **2026-06-25 기획 변경(Access Code → OTP, UI 위계 개선) 재작업 코드 완료.** 참가자 인증을 `공통 접속 안내 + 등록 이메일/휴대전화 6자리 OTP`로 전환했고, UI는 전역 `2px 진회색 테두리`에서 `1px 중립 경계선 + 세그먼트 탭 + 연한 상태 배경 + 약한 그림자` 위계로 교체했습니다. 신규 마이그레이션 `0009_otp_auth.sql`(OTP 챌린지·현장 예외 토큰 테이블 + 요청/검증 RPC) + `0010_otp_grants.sql`(service_role EXECUTE) + `0011_fix_match_identifier.sql`(min(uuid) 버그 수정)과 Edge `participant-otp-request`/`participant-otp-verify`(+ Mock 발송 어댑터)를 추가하고, 구 Access Code Edge 2함수를 제거했습니다. **라이브 반영 완료(2026-06-25)**: 0009~0011 `db push`(Local=Remote 0001~0011) + Edge 2함수 deploy + 구 함수(`participant-login`/`participant-resend-code`) 원격 삭제 + 스모크 통과(미등록 OTP요청→`200 generic`, 휴대폰형식 미등록→`200`, OTP검증 오답→`401 invalid_otp`). **✅ `PARTICIPANT_JWT_SECRET` 설정 완료**(레거시 HS256 = "PREVIOUS KEY"로 검증 유효, 등록+verify 재배포). ⚠️ 그 레거시 키 Revoke 금지(=참가자 로그인 중단). **✅ OTP 풀 라운드트립 라이브 검증 완료**: 임시 참가자로 OTP 발급→검증→JWT(exp 12h 확인)→PostgREST 정상토큰 `200`+본인행 / 변조토큰 `401 PGRST301` 대조까지 확인 후 테스트 데이터 정리. **참가자 인증 전 체인(매칭·OTP·커스텀 JWT·RLS) 라이브 작동 확인됨.** 현장 예외 1회용 로그인 링크는 테이블만 생성했고 발급/소비 RPC·Edge·관리자 화면은 Phase 4(참가자 관리 UI)에서 연결합니다.
 
@@ -28,6 +28,7 @@
   - [관리자 알림 설정 및 발송 활성화 명세](./page_admin_notification_settings.md)
   - [QR 서명 체크인 기능 보류 결정](./attendance_signature_policy.md)
 * **운영자/행사별 권한 작업 전**: [운영자 계정 관리 및 행사별 관리자 권한](./page_admin_operator_permissions.md), [인증·권한·트랜잭션 정책](./security_transactions.md) 필독
+* **기능 보완 작업 전**: [기능 보완 계획 및 태스크 체크리스트](./functional_followup_plan.md), [UI/UX and Responsive Review](./uiux_responsive_review.md) 필독
 
 ---
 
@@ -124,18 +125,191 @@
 - [x] **행사 만족도 집계 및 결과 시트 구현 완료** — 만족도 조사 커스터마이징 슬라이스 C와 종합 엑셀 내보내기에 통합 완료.
 - [x] **30초 만료 서명 QR 체크인 기능은 보류/제외 결정** — 현장 관리자 또는 전문가가 직접 출석을 찍는 기존 방식으로 충분하다고 판단. 별도 QR 서명 체크인 플로우는 만들지 않는다. 참조: [QR 서명 체크인 기능 보류 결정](./attendance_signature_policy.md).
 
+### [ ] Phase 8: 운영 편의성 기능 보완
+> 사용자 피드백 기반 후속 범위. 상세 기준과 전체 체크리스트는 [기능 보완 계획 및 태스크 체크리스트](./functional_followup_plan.md)를 기준으로 한다.
+
+#### [x] 8-A. 관리자 메뉴 및 DB 정보 구조 (완료, 2026-06-28)
+> 메뉴 개명 + 참가자 DB 역할별 분리 + 8-C 공통 테이블 인프라 적용. **순수 프론트(마이그레이션 없음).** 신규 파일: `views/admin/ParticipantDbView.tsx`(역할 고정 공통 화면), `components/admin/participantColumns.tsx`(8-C `DataTable` 컬럼 정의·정렬값·검색텍스트 빌더), `components/admin/participantCells.tsx`(셀 렌더러 — react-refresh 규칙 회피용 분리). 제거: `views/admin/UserListView.tsx`·`components/admin/UserTable.tsx`(역할 탭 단일 화면 대체). `lint`·`typecheck`·`build`·`test`(252) 통과.
+- [x] 관리자 메뉴의 `설정` 명칭을 `안내발송 관리`로 변경한다. → `navigation.ts` ROLE_NAV/navItemsFor.
+- [x] 참가자 DB 관리를 `스타트업 DB`와 `전문가 DB`로 분리한다. → 단일 `ParticipantDbView` 를 `role` 으로 고정해 양쪽 화면 공유.
+- [x] `스타트업 DB`와 `전문가 DB`를 별도 라우트로 둘지, 동일 라우트의 역할 고정 뷰로 둘지 결정한다. → **별도 라우트 채택**: `/admin/startups`·`/admin/experts`(구 `/admin/users`는 `/admin/startups`로 리다이렉트). 컴포넌트는 공유하되 메뉴·URL 분리.
+- [x] 최고관리자 전용 메뉴와 일반 행사 운영자 메뉴 노출 기준을 재확인한다. → 두 DB 라우트 모두 `RequireSuperAdmin` 아래 유지, `navItemsFor` 가 최고관리자에게만 노출(슬라이스 E 게이팅 계승).
+- [x] 전역 안내발송 관리는 `안내발송 관리`에서, 행사별 알림 정책은 행사 상세 `행사알림` 탭의 설정 모달에서 관리하도록 정리한다. → 전역=`/admin/settings`(메뉴명만 변경). 행사별 탭의 모달화는 8-E/8-F 에서 진행.
+> 공통 테이블 적용분: 검색(이름·기업/소속·이메일·연락처), 정렬(이름·기업/소속·등록일, 기본 등록일 내림차순), 필터(소개서/프로필 첨부 유무), 페이지네이션 30개. **OTP 컬럼 정리는 8-B 로 이관**(현재는 기존 `최근 OTP` 컬럼 유지).
+
+#### [x] 8-B. 참가자 DB 컬럼 및 OTP 이력 재검토 (코드 완료, 2026-06-28)
+> 무료 운영 모드(이름+휴대전화 로그인) 기준으로 참가자 DB 핵심 운영 컬럼을 재정렬했다. **결정(사용자 합의)**: OTP 컬럼은 `진단용으로 격리`(기본 숨김 + `진단 정보(OTP)` 토글로만 노출), 핵심 지표는 `최근 로그인`·`스타트업 IR 업로드 상태/주체`로 대체. 이를 위해 마이그레이션 `0046_login_and_upload_tracking.sql` 추가: `users.last_login_at`(로그인 RPC `login_participant_by_name_phone`·긴급링크 소비 `consume_emergency_login_token` 성공 시 갱신) + `users.proposal_uploaded_at/proposal_uploaded_by`(BEFORE INSERT/UPDATE 트리거 `track_proposal_upload` 가 `current_app_user_id()` 로 자동 기록 — 관리자 대행 업로드와 8-H 스타트업 자가 업로드 양쪽 동일 경로, 기존 소개서는 등록일로 backfill·주체 NULL). 프론트: `types/user`(컬럼+`proposal_uploader_name`), `hooks/useUsers`(신규 컬럼 SELECT + 업로더 이름 별도 조회 병합), `participantColumns`(최근 OTP→`최근 로그인` 핵심 컬럼 교체·`showDiagnostics` 토글로 OTP 격리·스타트업 `IR/소개서` 컬럼=업로드 상태+주체+시각·정렬에 최근 로그인 추가), `participantCells`(`LastLoginCell`[최근 로그인+현장 링크 활성]·`ProposalStatusCell`[보기+업로더·시각, 미업로드 강조]·`OtpCell` 진단 전용), `ParticipantDbView`(로그인 이력 필터 칩 + 진단 토글). `lint`·`typecheck`·`build`·`test`(252) 통과. **✅ 라이브 배포 완료(2026-06-28)**: `0046` `db push`(Local=Remote 0001~0046). ⚠ 라이브 풀 라운드트립 미검증(참가자 로그인 후 `최근 로그인` 갱신 / 관리자 소개서 업로드 후 주체·시각 기록 표시).
+- [x] 현재 기본 로그인 방식이 `이름 + 휴대전화번호`임을 기준으로 `최근 OTP`/OTP 이력 컬럼의 운영 의미를 재확인한다. → 무료 운영 모드에서 의미 상실(외부 발송 비활성) 확인.
+- [x] OTP 관련 표현을 `유지`, `숨김`, `대체` 중 하나로 결정한다. → **`대체`(핵심은 최근 로그인) + OTP 는 진단 토글로 `숨김/격리`**.
+- [x] 무료 운영 모드 기본 화면에서는 `최근 OTP`를 핵심 컬럼으로 노출하지 않는 방향을 검토한다. → 기본 컬럼에서 제거, 토글 ON 시에만 노출.
+- [x] 대체 컬럼 후보를 확정한다: `최근 로그인`, `로그인 식별정보`, `세션 상태`, `현장 1회용 링크 상태`. → **`최근 로그인`(신규 추적) 핵심 + `현장 링크 활성`(LastLoginCell 동반) 채택**. 로그인 식별정보는 기존 이름·연락처 컬럼으로 충족, `세션 상태`는 무효화 액션으로 갈음(별도 컬럼 미도입).
+- [x] OTP 자동 발송을 유료 알림 확장 모드에서 재사용할 경우, OTP 이력을 고급 필터 또는 진단용 상세 영역으로 격리한다. → `진단 정보(OTP)` 토글로 격리(유료 모드/내부 진단 시 노출).
+- [x] 스타트업 DB에 IR/소개서 업로드 상태와 마지막 업로드 주체를 핵심 컬럼으로 노출한다. → `IR/소개서` 컬럼이 보기 버튼 + 업로더 이름·시각, 미업로드는 강조색.
+
+#### [~] 8-C. 공통 데이터 테이블 기준
+> **인프라 슬라이스 완료(2026-06-28).** 재사용 컴포넌트·순수 로직·상태 훅·테스트를 구축했고, **개별 테이블 마이그레이션은 8-A(참가자 DB 분리)·8-B·8-J(카드→테이블 전환)에서** 이 인프라를 소비하며 진행한다. 신규 파일: `lib/dataTable.ts`(검색/필터/정렬/페이지네이션 순수함수 — `DEFAULT_PAGE_SIZE=30`·`filterByKeyword`/`applyFilters`/`sortRows`(안정정렬·null 후순위)/`paginate`/`nextSort`(asc→desc→해제)/`pageRange`), `hooks/useDebouncedValue.ts`, `hooks/useDataTable.ts`(검색·필터·정렬·페이지 상태 + 검색/필터 변경 시 1페이지 리셋 + 데이터 축소 시 페이지 보정. ⚠ `filters` 는 호출부 `useMemo` 로 참조 안정화 필요), `components/common/{DataTable,Pagination,FilterBar}.tsx`(DataTable=컬럼정의 기반 정렬헤더·로딩/에러/빈상태, Pagination=윈도우 페이지번호+"N–M/전체", FilterBar=`SearchInput`/`FilterChips`). 기존 UserTable/OperatorTable 마크업·`index.css` 토큰·라벨 패턴 계승. `lint`·`typecheck`·`build`·`test`(**252**, 신규 18 `dataTable.test.ts`) 통과. **마이그레이션 없음**(순수 프론트, db push 불필요).
+- [x] 공통 `DataTable`/`Pagination`/`FilterBar` 패턴 도입 여부와 구현 범위를 정한다. → **도입 확정·인프라 구축 완료.**
+- [x] 모든 데이터 테이블의 기본 페이지 크기를 30개로 통일한다. → `DEFAULT_PAGE_SIZE=30` 기준 확정(각 화면 적용은 8-A/8-J).
+- [x] 모든 데이터 테이블에 검색 기능을 적용한다. → `SearchInput`+`useDataTable` 검색(디바운스) 인프라 제공(화면별 적용은 후속).
+- [x] 모든 데이터 테이블에 화면 성격에 맞는 필터를 적용한다. → `FilterChips`+`applyFilters` 인프라 제공(화면별 적용은 후속).
+- [x] 주요 테이블에 정렬 기준을 제공한다. → `DataTable` 정렬 헤더 + `sortRows` 제공(화면별 적용은 후속).
+- [ ] 장기 운영 데이터는 서버 쿼리 기반 검색/필터/페이지네이션으로 전환한다. → **장기 과제로 보류**(현재 클라이언트 메모리 처리, 인프라가 서버 전환 시에도 동일 API 유지 가능).
+- [x] 우선 적용 대상 목록을 확정한다: 행사 목록, 스타트업 DB, 전문가 DB, 참가 스타트업, 참가 전문가, 예약 현황/강제 조정, 상담일지, 행사 만족도, 전문가 만족도, 증빙사진, 행사알림 로그.
+
+#### [x] 8-D. 행사 생성/세팅 확장 (완료, 2026-06-28)
+> ① 만족도 수집 정책 컬럼 추가 + ② 행사별 운영자 지정 진입점. **신규 마이그레이션 `0047`.** 운영자 지정 UX 는 **행사 상세 헤더 진입점만**(사용자 결정) — 행사 생성 폼은 미변경, 최고관리자 전용 `운영자 배정` 버튼으로 event→operators 배정 모달을 연다(기존 `event-operator-grant`/`-revoke` Edge·RPC 재사용). 만족도 정책 기본값/backfill 은 **신규·기존 모두 `EVENT_ONLY`**(현재 동작 보존, 사용자 결정). 신규 `0047_event_satisfaction_policy.sql`(`events.satisfaction_policy` NOT NULL DEFAULT 'EVENT_ONLY' + CHECK 4종), `components/admin/EventOperatorAssignModal.tsx`, `hooks/useOperators#useEventOperators`(행사 기준 활성 운영자 조회). 변경: `types/event`(SatisfactionPolicy)·`schemas/eventSchemas`·`hooks/useEventMutations`·`hooks/useEvents`·`hooks/useEventDetail`(컬럼)·`EventFormModal`(정책 SelectField)·`labels`(SATISFACTION_POLICY_LABELS)·`useOperatorMutations`(grant/revoke 가 by-event 쿼리도 무효화)·`EventDetailView`(헤더 운영자 배정 버튼+모달). `lint`·`typecheck`·`build`·`test`(**254**, 신규 2) 통과. **✅ `0047` db push 완료**(Local=Remote 0001~0047). 전문가별 만족도(EXPERT_ONLY/BOTH) 실제 수집·집계는 8-G 에서 이 정책 컬럼을 소비. ⚠ 풀 라운드트립(최고관리자 로그인→운영자 배정/회수, 정책 저장) 미검증.
+- [x] 행사 세팅 시 관리 계정/운영자를 함께 지정할 수 있게 한다. → 행사 상세 헤더 `운영자 배정` 버튼(최고관리자 전용) → `EventOperatorAssignModal`.
+- [x] 행사 생성 플로우에서 최고관리자가 행사별 운영자를 즉시 추가하거나 권한 배정 화면으로 이어지게 한다. → **상세 화면 진입점 채택**(사용자 결정). 생성 직후 상세에서 배정. event_id 가 필요해 생성 폼 인라인 배정은 비채택.
+- [x] 행사 기본 설정에 만족도 수집 정책을 추가한다. → `EventFormModal` 만족도 수집 정책 SelectField.
+- [x] 만족도 수집 정책 옵션을 확정한다: `행사 전체 만족도만`, `상담 전문가별 만족도만`, `둘 다`, `수집 안 함`. → `EVENT_ONLY/EXPERT_ONLY/BOTH/NONE`(CHECK 제약 + 라벨).
+- [x] 행사 설정 저장 시 만족도 수집 정책의 기본값과 기존 행사 backfill 정책을 결정한다. → **신규·기존 모두 `EVENT_ONLY`**(NOT NULL DEFAULT 로 기존 행사 자동 backfill, 현재 동작 100% 보존).
+
+#### [x] 8-E. 행사 상세 탭 재구성 (완료, 2026-06-28)
+> `EventDetailView` 탭을 명세 §1.2 목표 순서 10탭으로 재구성. **순수 프론트(마이그레이션 없음).** 기존 패널은 재사용하고 배치·진입 탭·역할 분리만 변경. `ParticipantAssignPanel`에 `lockedRole` prop 추가(역할 고정 시 내부 서브탭 숨김)로 `참가 스타트업`/`참가 전문가` 탭을 단일 컴포넌트로 분리. 예약·강제조정은 한 탭에 `BookingStatsPanel`+`SlotForcePanel`(강제조정은 `canManage` 게이팅)로 통합. 결과 중심 탭(상담일지·행사 만족도·행사알림)은 결과/로그 패널을 메인으로, 설정 빌더는 `SettingsSection`(점선 구분 보조 영역, `canManage` 한정)으로 하단 배치 — **8-F 에서 우측 상단 버튼+모달로 전환 예정**. 상태별 기본 진입 탭: DRAFT→테이블 세팅, BOOKING/ALLOCATION→예약·강제조정, PROGRESS→진행 현황, FINISHED→상담일지. `TAB_CAPABILITY` 는 결과 탭을 `view` 로 노출하되 내부 관리 영역만 `canManage` 게이팅. `lint`·`typecheck`·`build`·`test`(252) 통과.
+- [x] 행사 상세 탭 순서를 `테이블 세팅`으로 시작하도록 변경한다. → `tables` 탭이 첫 번째, DRAFT 기본 진입.
+- [x] `참가 스타트업` 탭을 별도 구성한다. → `startups`(`ParticipantAssignPanel lockedRole="STARTUP"`).
+- [x] `참가 전문가` 탭을 별도 구성한다. → `experts`(`lockedRole="EXPERT"`).
+- [x] `예약 현황 + 강제 조정` 탭을 하나로 묶어 구성한다. → `booking` 탭에 통계+강제조정 통합(강제조정 `canManage` 한정).
+- [x] `진행 현황` 탭은 현재 진행 모니터링 중심으로 유지한다. → `ProgressDashboardPanel` 그대로.
+- [x] `상담일지` 탭을 결과 목록 중심으로 구성한다. → `CounselingReportPanel` 메인 + 설정 보조 영역.
+- [x] `행사 만족도` 탭을 별도 구성한다. → `SurveyReportPanel` 메인 + 설정 보조 영역.
+- [x] `전문가 만족도` 탭을 별도 구성한다. → `expert-survey` 탭 생성(8-G 에서 데이터/집계 채움, 현재 안내 플레이스홀더).
+- [x] `증빙사진` 탭을 현재 사진 현황 기능과 연결한다. → `photos`(`PhotoStatusPanel`).
+- [x] `행사알림` 탭을 현황/로그 중심으로 구성한다. → `notifications`(`NotificationLogPanel` 메인 + 설정 보조 영역).
+
+#### [x] 8-F. 결과 메인 + 설정 모달 패턴 (완료, 2026-06-28)
+> 8-E 의 인라인 `SettingsSection`(점선 보조 영역)을 제거하고, 결과 중심 탭의 빌더/설정을 **우측 상단 `…설정` 버튼 → 모달**로 전환했다. 상담일지 결과 목록 행은 클릭 시 상담 내용 상세 모달을 연다. **순수 프론트(마이그레이션 없음).** 공통 `Modal` 에 모달 스택을 추가해 중첩 모달(설정 모달 안의 문항 편집 모달)에서 Esc 가 최상단 모달만 닫도록 수정. `CounselingBuilderPanel`/`SurveyBuilderPanel` 에 `embedded` prop(외곽 Card·자체 제목 생략) 추가해 모달 안에서 제목 중복 없이 렌더. `lint`·`typecheck`·`build`·`test`(252) 통과.
+- [x] `상담일지` 탭은 결과 목록을 기본 화면으로 둔다. → `CounselingReportPanel` 메인, 설정 보조 영역 제거.
+- [x] 상담일지 목록 행 클릭 시 상담 내용 상세를 모달 또는 드로어로 보여준다. → `CounselingLogDetailModal`(문항별 답변 + 후속 연계·공개 여부·후속 메모, 행=버튼).
+- [x] `상담일지 설정`은 우측 상단 버튼에서 모달로 연다. → `상담일지 설정` 버튼 → `CounselingBuilderPanel embedded` 모달.
+- [x] `행사 만족도` 탭은 결과 목록/집계를 기본 화면으로 둔다. → `SurveyReportPanel` 메인.
+- [x] `행사 만족도 설정`은 우측 상단 버튼에서 모달로 연다. → `행사 만족도 설정` 버튼 → `SurveyBuilderPanel embedded` 모달.
+- [x] `전문가 만족도` 탭은 결과 목록/집계를 기본 화면으로 둔다. → 8-G `ExpertSurveyReportPanel`(전문가별 집계) 메인.
+- [x] `전문가 만족도 설정`은 우측 상단 버튼에서 모달로 연다. → 8-G `전문가 만족도 설정` 버튼 → `SurveyBuilderPanel embedded scope="EXPERT"` 모달.
+- [x] `행사알림` 탭은 발송 현황/로그를 기본 화면으로 둔다. → `NotificationLogPanel` 메인.
+- [x] `행사알림 설정`은 우측 상단 버튼에서 모달로 연다. → `행사알림 설정` 버튼 → `EventNotificationSettingsPanel` 모달.
+
+#### [x] 8-G. 만족도 정책 확장 (완료, 2026-06-28)
+> 행사 만족도(EVENT)와 전문가별 만족도(EXPERT)를 같은 동적 설문 인프라 위에서 스코프로 분리. **신규 마이그레이션 `0048_expert_satisfaction.sql`** — 신규 테이블 없이 기존 3테이블 확장: `survey_questions.survey_scope`('EVENT'|'EXPERT'), `survey_responses.survey_scope/target_expert_id/slot_id`(+CHECK 정합). 전역 UNIQUE(event,user) → 부분 유니크 2개(EVENT=event+user 1회 / **EXPERT=slot_id 1회**). 전문가 기본문항 자동 프로비저닝(트리거 `trg_event_default_survey` 확장 + backfill). RPC 2개: `list_my_consulted_experts`(SECURITY DEFINER, 응답 가능 슬롯+전문가명+응답여부), `submit_expert_survey`(슬롯 단위 원자 제출). **사용자 합의**: 응답 자격=취소·노쇼 제외(WAITING/IN_PROGRESS/COMPLETED), 중복 차단=상담 슬롯 기준. 프론트 신규 — `lib/expertSurveyReport`(+test 4)·`ExpertSurveyReportPanel`(전문가별 집계·CSV)·`ExpertSatisfactionPanel`(스타트업 슬롯별 카드 폼)·공용 `surveyFields.tsx`(입력 위젯 추출). `SurveyBuilderPanel` scope prop·`StartupPortalView` 정책 게이팅·`EventDetailView` expert-survey 탭(리포트+설정 모달). `lint`·`typecheck`·`build`·`test`(**258**, 신규 4) 통과. **✅ `0048` db push 완료**(Local=Remote 0001~0048) + anon 스모크(두 RPC `42501`, scope/slot 컬럼 `200 []`). ⚠ 풀 라운드트립(스타트업 FINISHED 행사에서 전문가별 제출·중복 차단, 관리자 전문가별 집계) 미검증.
+- [x] 기존 동적 설문 구조에서 행사 전체 만족도와 전문가별 만족도를 분리한다. → `survey_scope` 컬럼으로 스코프 분리(테이블 추가 없음).
+- [x] 전문가별 만족도 데이터 기준을 확정한다. → **상담 슬롯 기준**(slot_id 부분 유니크), 응답마다 `target_expert_id` 보존해 전문가별 집계.
+- [x] 스타트업이 실제 상담한 전문가/세션별로만 전문가 만족도를 제출할 수 있게 한다. → `list_my_consulted_experts`/`submit_expert_survey` 가 본인 예약 슬롯(취소·노쇼 제외)만 허용.
+- [x] 동일 상담 슬롯에 대한 전문가 만족도 중복 제출을 차단한다. → `uniq_expert_survey_slot` 부분 유니크(slot_id) + RPC 23505 친절 메시지.
+- [x] 스타트업 종료 화면에서 행사 만족도와 전문가별 만족도를 구분해 보여준다. → 정책별 `SatisfactionPanel`/`ExpertSatisfactionPanel` 분리 노출.
+- [x] 관리자 결과 화면에서 `행사 만족도`와 `전문가 만족도`를 별도 데이터셋으로 집계한다. → `SurveyReportPanel`(EVENT)·`ExpertSurveyReportPanel`(EXPERT, 전문가별) 별도 탭.
+- [x] 종합 엑셀 내보내기에 전문가별 만족도 시트를 추가할지 결정한다. → 전문가 탭 내 별도 CSV 내보내기 제공(전문가·스타트업 식별 포함). 통합 엑셀 시트는 백로그.
+
+#### [x] 8-H. 스타트업 IR/소개서 직접 업로드 (완료, 2026-06-28)
+> 스타트업이 포털에서 직접 IR/소개서 PDF 를 업로드·교체·해제하도록 추가. **신규 마이그레이션 `0049_startup_self_proposal.sql`** — `set_my_proposal_file(p_file_url)` SECURITY DEFINER RPC(본인 STARTUP 행만 `proposal_file_url` 갱신, 경로 위변조 차단[`proposals/{본인id}/%` 만 허용], anon revoke·authenticated grant). users_update RLS 가 ADMIN 전용이라 참가자 직접 UPDATE 가 막혀 RPC 경유. Storage(`proposals` 버킷) 쓰기/삭제는 `0007` 정책이 이미 소유 스타트업 본인을 허용(추가 정책 불필요) → `participantClient` 로 직접 업로드 후 RPC 로 컬럼 갱신. 마지막 업로더/시각은 `0046` 트리거(`track_proposal_upload`, `current_app_user_id()`)가 SECURITY DEFINER 안에서도 본인으로 정확히 기록. **사용자 결정**: ①교체 이력=audit_logs 에 매 업로드/교체/해제 기록(UPLOAD/REPLACE/CLEAR_PROPOSAL_FILE 액션) ②노출 시점=예약 단계부터 상시(FINISHED 제외). 프론트: `lib/storage`(`uploadParticipantFileWithClient`/`removeParticipantFileWithClient` 클라이언트 주입 변형 추가, 기존 운영진 래퍼 유지)·`hooks/useStartupPortal`(`useMyProposal`/`useSetMyProposal`)·신규 `components/startup/ProposalUploadPanel.tsx`(현황·보기[participantClient signed URL]·업로드/교체/해제)·`StartupPortalView`(`!finished` 시 노출)·관리자 `ParticipantAssignPanel` 스타트업 행에 `IR 제출/미제출` 배지(`AssignableUser.proposal_file_url`·`useEventDetail` SELECT·`useEventExport` Map 보강). `lint`·`typecheck`·`build`·`test`(**258**) 통과. **✅ `0049` db push 완료**(Local=Remote 0001~0049) + anon 스모크(`set_my_proposal_file` → `42501 permission denied`). ⚠ 풀 라운드트립(스타트업 로그인→직접 업로드/교체/해제, 관리자 화면 상태·업로더 반영) 미검증.
+- [x] 스타트업 포털에서 직접 IR/소개서 PDF를 업로드할 수 있게 한다. → `ProposalUploadPanel` + `set_my_proposal_file` RPC(participantClient 경로).
+- [x] 스타트업이 기존 IR/소개서를 교체할 수 있게 한다. → 같은 패널에서 교체(동일 객체 경로 `proposals/{id}/proposal.pdf` upsert, 고아 객체 없음)·해제.
+- [x] 관리자는 미업로드 기업의 IR/소개서를 대신 업로드할 수 있게 유지한다. → 기존 `UserDetailModal`(`useSaveParticipant`, 운영진 supabase) 경로 그대로 유지.
+- [x] 관리자 스타트업 DB에서 IR 업로드 상태를 확인할 수 있게 한다. → 8-B 에서 `IR/소개서` 컬럼(업로더·시각·미업로드 강조) 이미 제공.
+- [x] 행사 참가 스타트업 목록에서도 IR 업로드 상태를 확인할 수 있게 한다. → `ParticipantAssignPanel` 참가 스타트업 행에 `IR 제출/미제출` 배지 추가.
+- [x] 파일 교체 이력과 마지막 업로드 주체를 기록할지 결정한다. → **기록(사용자 결정)**: 마지막 주체/시각=`0046` 트리거, 교체 이력=`audit_logs` 매 기록(전용 테이블 미신설).
+- [x] 업로드 파일 권한과 Signed URL 정책을 현재 `proposals` 버킷 정책과 정합시킨다. → `0007` 소유 스타트업 본인 쓰기/삭제 허용 정책 재사용(추가 정책 불필요), 보기는 `participantClient` 단기 Signed URL.
+
+#### [x] 8-I. 스타트업 예약 화면 전문가별 보기 개선 (완료, 2026-06-28)
+> 예약 일정표의 `전문가별 보기`를 **전문가 정보 카드 중심**으로 재구성. 기존 전문가별 탭은 전문가×시간 매트릭스(시간표를 전문가별로 나열한 수준)였는데, 명세 §1.3 기준에 맞춰 전문가 정보(프로필 사진·이름·소속·직책·분야·소개)를 먼저 보여주고 그 전문가의 가능 시간대 칩을 함께 노출하도록 교체했다. **기존 매트릭스 표(전문가 행×시간 열)는 `시간대별 보기`로 보존**(빠른 예약 탐색용 테이블) 하고 **기본 탭으로 승격**(명세 §T8 모바일 우선). **순수 프론트(마이그레이션 없음).** 신규 파일: `components/startup/ExpertBookingList.tsx`(전문가 카드 목록 — 모든 참가 전문가 노출[슬롯 0개여도 정보 탐색], 테이블코드·이름 정렬, `예약함` 배지 + 동일전문가 중복정책 안내), `components/startup/TimeMatrixGrid.tsx`(기존 매트릭스 표를 별도 컴포넌트로 추출 — `시간대별 보기`), `components/startup/ExpertAvatar.tsx`(Signed URL 이미지 또는 이니셜 플레이스홀더), `components/startup/slotCellStyles.ts`(셀 상태별 Tailwind 색/라벨 공유 상수). 변경: `lib/startupBooking`(`cellStateOf`/`CellState` 순수함수로 추출 — 두 보기 공유·테스트), `lib/storage`(`createSignedUrlsWithClient` 일괄 Signed URL 헬퍼), `types/startupBooking`(`PortalExpert.profileImageUrl`), `hooks/useStartupPortal`(`useEventExperts` 가 `profile_image_url` SELECT + `useExpertAvatars` 일괄 Signed URL 훅[avatars 버킷, 슬롯 폴링과 분리·만료 전 캐시]), `BookingSlotsGrid`(탭 컨테이너로 축소 — `TimeMatrixGrid`/`ExpertBookingList` 위임, 기본 탭 `time`, 탭별 목적 안내문), `StartupPortalView`(아바타 훅 연결). 프로필 사진은 `0007` `avatars_read`(authenticated 전체 허용)로 participantClient 가 단기 Signed URL 조회 가능(추가 정책 불필요). `lint`·`typecheck`·`build`·`test`(**264**, 신규 `cellStateOf` 6) 통과. ⚠ 풀 라운드트립(스타트업 로그인→전문가별 카드/사진 표시·시간대 칩 예약) 미검증.
+- [x] 현재 전문가별 보기의 정보 구조를 점검한다. → 기존=전문가×시간 매트릭스(정보 없음), 시간대별과 사실상 동형임 확인.
+- [x] 전문가별 보기를 전문가 정보 중심으로 재구성한다. → `ExpertBookingList` 카드 목록(매트릭스는 시간대별로 이동).
+- [x] 전문가별 보기에서 이름, 소속, 직책, 전문 분야, 소개, 프로필 사진을 보여준다. → 카드 헤더(아바타+이름+직책+테이블배지)·소속·분야칩·소개 클램프.
+- [x] 전문가별 보기에서 해당 전문가의 상담 가능 시간대를 함께 보여준다. → 카드 하단 시간대 칩 그리드(시각범위 + 상태, open 만 클릭 예약).
+- [x] 이미 예약한 전문가인지 여부를 명확히 표시한다. → `예약함` 배지 + 중복정책별 안내(허용=추가 예약 가능 / 비허용=추가 제한).
+- [x] 시간대별 보기는 빠른 예약 탐색용으로 유지한다. → **기존 매트릭스 표(전문가 행×시간 열) 유지** + **기본 탭으로 승격**(`TimeMatrixGrid`).
+- [x] 전문가별 보기와 시간대별 보기의 목적과 UI 차이를 문서/화면 구조에 반영한다. → 탭별 목적 안내문(시간 기준 빠른 탐색=테이블 / 전문가 정보 탐색=카드) + 명세 §1.3 반영.
+
+#### [x] 8-J. 카드형 화면의 테이블 전환 검토 (완료, 2026-06-28)
+> 백오피스 카드/리스트형 화면을 8-C 공통 DataTable(검색·필터·정렬·30 페이지네이션)로 선별 전환. **순수 프론트(마이그레이션 없음).** **사용자 결정**: ①행사 목록=`보기 토글(카드+테이블)`(8-I 시간대별/전문가별 토글과 동일 패턴, 카드 탐색성 + 테이블 일람 모두 확보) ②참가자 지정 현재 명단=`테이블 전환`. 신규 `components/admin/eventColumns.tsx`(행사 테이블 보기 컬럼·정렬[행사명·상태순서·행사 일정·참가 통계]·검색 헬퍼). 변경: `NotificationLogPanel`(발송 로그 `<ul>`→DataTable: 상태/유형/채널·대상/내용/적재시각/재시도/재시도버튼, 검색=유형·대상·내용, 상태 필터칩, 정렬=상태가중치[`statusWeight`]·유형·적재시각·재시도, 요약 4지표 카드 유지), `CounselingReportPanel`(결과 행 목록→DataTable: 스타트업/전문가/상담일시/후속연계/세션상태, 행 클릭→기존 상세 모달, 검색=스타트업·전문가명, 세션상태+후속연계 필터칩, 정렬=상담일시·세션상태, 요약·평점평균·CSV 유지), `EventListView`(카드/테이블 보기 토글 + 테이블 모드 DataTable·상태 필터탭 공유·카드 모드는 기존 그리드 유지), `ParticipantAssignPanel#CurrentList`(현재 명단 `<ul>`→DataTable: 이름·IR상태[스타트업]·기본테이블 셀렉트[전문가]·제외, 검색·정렬[이름], 후보 추가 칩 영역은 유지). **만족도 결과(`SurveyReportPanel`/`ExpertSurveyReportPanel`)=전환 제외**(문항별 집계·차트 리포트라 카드 나열이 아님, 응답자별 행은 CSV 로 제공). `lint`·`typecheck`·`build`·`test`(**264**) 통과.
+- [x] 카드형으로 구현된 백오피스 화면을 읽고 테이블 전환 필요 여부를 판정한다. → 5개 후보 중 알림 로그·상담일지 결과·참가자 지정=전환, 행사 목록=토글, 만족도 결과=집계 유지.
+- [x] 행사 목록의 테이블 전환 여부를 결정한다. → **보기 토글(카드+테이블)**(사용자 결정). 탐색 중심 카드 + 누적 일람 테이블 병행.
+- [x] 알림 로그의 테이블 전환 여부를 결정한다. → **전환**(누적 로그·상태 정렬·검색에 테이블 적합).
+- [x] 상담일지 결과의 테이블 전환 여부를 결정한다. → **전환**(행 클릭→상세 모달 유지, 요약·평점·CSV 보존).
+- [x] 만족도 결과의 테이블 전환 여부를 결정한다. → **전환 제외**(문항별 집계/차트 리포트, 카드 나열 아님). 응답자별 데이터는 CSV.
+- [x] 참가자 지정 목록의 테이블 전환 여부를 결정한다. → **전환**(현재 명단; 인라인 셀렉트/제외 셀 유지, 후보 추가 칩은 유지).
+- [x] 현장 조작 중심 화면은 카드형 또는 모바일 리스트형을 유지한다. → 진행 현황 타임그리드·예약 강제조정·증빙사진 업로드·전문가 대시보드 등 현장/조작 화면은 유지(이번 전환 대상 아님).
+- [x] 테이블 전환 대상에는 검색, 필터, 정렬, 30개 페이지네이션을 함께 적용한다. → 모든 전환 화면이 8-C `useDataTable`+`DataTable`+`FilterBar`+`Pagination`(DEFAULT_PAGE_SIZE=30) 소비.
+
+#### [ ] 8-K. 전문가 범위
+- [ ] 이번 후속 범위에서는 전문가 기능 추가를 보류한다.
+
 ### [~] 부가 기능: 운영자 계정 관리 및 행사별 관리자 권한
-> 현재 `ADMIN/STAFF`는 Supabase Auth 로그인 + 전역 역할 기반으로 동작한다. 다음 단계에서는 최고관리자가 운영자 계정을 생성하고, 행사(`events`)별로 관리자/스태프 권한을 부여해 일반 운영자의 접근 범위를 제한한다. 상세 명세: [운영자 계정 관리 및 행사별 관리자 권한](./page_admin_operator_permissions.md).
+> 현재 `ADMIN/STAFF`는 Supabase Auth 로그인 + 전역 역할 기반으로 동작한다. 다음 단계에서는 최고관리자가 운영자 계정을 생성하고, 행사(`events`)별로 관리자/스태프 권한을 부여해 일반 운영자의 접근 범위를 제한한다. 상세 명세: [운영자 계정 관리 및 행사별 관리자 권한](./page_admin_operator_permissions.md). **작업 경과·남은 작업(B-2/F) 핸드오프: [worklog_operator_permissions.md](./worklog_operator_permissions.md) 필독.**
 >
 > **⚠ 진행 순서 재배치(2026-06-28 결정):** 슬라이스 B(RLS/RPC 스코프 전환)를 먼저 하면 배정 UI 가 없는 상태라 일반 ADMIN 이 모든 행사에서 잠긴다(lockout). 명세 §7 순서대로 **비파괴 추가 슬라이스(C 운영자 Auth API → D 운영자 UI → E 권한 배정 UI)를 먼저** 만들고, **스코프 전환(B)을 맨 마지막**에 적용한다. 라이브 admin 계정은 `is_super_admin=true` 임을 확인함(스코프 전환 후에도 전체 접근 유지).
 - [x] **슬라이스 A — DB 권한 모델 (코드 완료)** — `0039_event_operator_roles.sql`: `event_operator_roles` 테이블(행사별 권한 등급 `OWNER/MANAGER/STAFF/VIEWER`, soft revoke=`revoked_at`, 활성 `(event_id,user_id)` 유니크 부분 인덱스 + 헬퍼 조회용 인덱스 2종) + 권한 헬퍼 `is_operator_admin`/`is_event_operator`/`can_manage_event`/`can_staff_event`/`can_view_event`(모두 SECURITY DEFINER, 최고관리자 무조건 통과, 0017 NULL-안전 패턴 유지) + 테이블 RLS(조회=최고관리자 전체·운영자 본인 행 / 쓰기=최고관리자 직접, 일반 부여·회수는 슬라이스 C service_role Edge 경유). **순수 추가(additive)** — 기존 전역 ADMIN RLS/RPC 는 그대로 두며 행사 범위 전환은 슬라이스 B 에서. **✅ 라이브 배포 완료(2026-06-28)**: `0039` `db push`(Local=Remote 0001~0039) + anon `event_operator_roles` SELECT → `42501 permission denied` 차단 확인.
-- [~] **슬라이스 B — RLS/RPC 스코프 전환 (B-1 RLS 완료 / B-2 RPC 가드 진행 예정)** — C~E 완료 후 lockout 위험 없이 착수(라이브 admin=최고관리자 확인됨).
+- [x] **슬라이스 B — RLS/RPC 스코프 전환 (B-1 RLS + B-2 RPC 가드 완료)** — C~E 완료 후 lockout 위험 없이 착수(라이브 admin=최고관리자 확인됨).
   - [x] **B-1: 행사 범위 RLS 전환 (코드+배포, 2026-06-28)** — `0042_event_scope_rls.sql`: `events`(SELECT=`can_view_event` 또는 참가자 / INSERT=`is_super_admin` / UPDATE=`can_manage_event`), `event_tables`·`event_participants`(쓰기=`can_manage_event`, 조회=`can_view_event` 또는 참가자), `matching_slots`(admin 분기=`can_view_event`), `matching_proposals`(`can_manage_event`), `notification_settings`(전역=`is_super_admin`), `event_notification_settings`(`can_manage_event`), `notification_logs`(`can_view_event`), `audit_logs`(`is_super_admin` 로 강화), `company_photos`(`can_staff_event` 또는 기업 본인) 정책을 DROP/재생성. **헬퍼가 최고관리자를 무조건 통과시켜 무중단**. storage.objects(event-photos) 객체 정책은 경로 `::uuid` 캐스팅 throw 위험으로 이번 단계 보류(테이블 RLS 가 1차 게이트). **✅ db push**(Local=Remote 0001~0042) + anon 스모크(스코프 테이블 전부 `200 []` 런타임 에러 없음). ⚠ 일반 관리자/스태프/뷰어 실 로그인 스코프 검증은 F.
-  - [ ] **B-2: 관리자 RPC 가드 행사 범위화** — `admin_force_assign`(0004)·`admin_force_cancel`(0014)·`mark_no_show`/`cancel_session`(0005)·슬롯 생성/정리(0015)·AI 제안/확정(0018)·알림/사용자 인증 관리(0012/0021/0034) 등 SECURITY DEFINER 가드의 `current_app_role()='ADMIN'` → `can_manage_event`/`can_staff_event`(event 인자 기준)로 교체. **전환적 핵심 RPC(예약·배치·출석)라 함수 본문 정확 재현 + 운영자 실 로그인 검증이 필요**해 F 시드와 함께 신중히 수행한다. (현 시점 위험 낮음: 일반 관리자 계정이 아직 없고 super_admin 만 존재 — 일반 운영자 생성·배정 전에 닫는다.)
+    - **B-1 후속: 잔여 전역 RLS 스코프 (코드+배포, 2026-06-28)** — `0044_event_scope_rls_followup.sql`: 이력/로그/설문/상담일지 결과 테이블의 전역 ADMIN SELECT 와 설문·상담 빌더 쓰기를 행사 범위로 좁힘(참가자 본인 분기 보존, 전역 ADMIN 분기만 헬퍼로). `can_view_event`: `counseling_logs`·`booking_history`·`attendance_logs`(slot 경유)·`satisfaction_surveys`·`survey_responses`·`survey_answers`(response 경유)·`survey_questions`·`counseling_log_questions`·`counseling_log_answers`(slot 경유). `can_manage_event`: `survey_questions`·`counseling_log_questions` 빌더 INSERT/UPDATE/DELETE. **✅ db push**(Local=Remote 0001~0044) + anon 스모크(9개 스코프 테이블 전부 `200 []`).
+    - **B-1 후속(2): event-photos 스토리지 RLS (코드+배포, 2026-06-28)** — `0045_storage_event_scope.sql`: event-photos 버킷 객체 정책 4종의 전역 `is_admin_or_staff()` → `can_staff_event(경로 event_id)`(읽기는 소유 기업 본인 유지). 신규 `_event_photo_event_id`(`foldername[1]::uuid`, `EXCEPTION→NULL` 안전 파싱 — 0007 패턴). proposals/avatars 는 경로에 event_id 없어 전역 유지. **✅ db push**(Local=Remote 0001~0045). **보류(의도적 전역 유지)**: `users`/`fields`/`user_fields`/`event_participant_fields` — 앱 전역 이름 해석·참가자 배정 후보 조회 기반이라 행사 후보 RPC 리팩터링 + 실 로그인 검증과 함께 진행(§5.3 목표는 `/admin/users` super 게이팅으로 달성).
+  - [x] **B-2: 관리자 RPC 가드 행사 범위화 (코드+배포, 2026-06-28)** — `0043_event_scope_rpc.sql`: SECURITY DEFINER 핵심 RPC 의 전역 가드(`current_app_role()='ADMIN'`/`IN('ADMIN','STAFF')`)를 행사 범위 헬퍼로 교체(함수 본문은 원본 그대로 재현, 가드 라인만 변경, 실패 메시지 동일 유지). **can_manage_event**: `admin_force_assign`(0004)·`admin_force_cancel`(0014)·`cancel_session`(0005)·`generate_event_slots`/`clear_unbooked_slots`(0015)·`generate_ai_proposals`/`confirm_ai_proposals`(0018)·`retry_notification`(0034, notification_logs.event_id 도출). **can_staff_event**(출석 성격): `mark_no_show`(0005)·`check_in`(0019)·`clear_attendance`(0020) — 전문가 셀프/담당 전문가 경로는 유지하고 전역 ADMIN/STAFF 분기만 헬퍼로. 슬롯/알림 인자 RPC 는 슬롯·로그에서 event_id 를 도출해 판단. `override_event_status`(0006)는 이미 `is_super_admin()`(상태 강제 변경=최고관리자)이라 미변경. 전역 참가자 디렉터리 RPC(0012/0021)는 전역 정책 확정 후 별도(2.2 핸드오프). **✅ `0043` db push 완료**(Local=Remote 0001~0043) + anon 스모크(헬퍼 런타임 무오류 — 미매핑/존재하지 않는 event 인자에서 헬퍼가 FALSE 반환→기존과 동일한 `관리자만 가능` 가드 메시지로 거부, `retry_notification` anon revoke로 `42501`). ⚠ **정상경로 회귀(운영자 실 로그인)는 슬라이스 F 시드와 함께 검증**(헤드리스 불가).
 - [x] **슬라이스 C — 운영자 Auth 관리 API (코드+배포 완료, 2026-06-28)** — `0040_operator_admin_rpc.sql`: service_role 전용 RPC `admin_create_operator`(Auth 사용자 선행 생성 후 `public.users` 행+감사 로그)·`admin_update_operator`(이름/역할/super 플래그/비활성화=soft delete, 본인 super 해제·비활성 차단)·`record_operator_audit`(비밀번호 재설정 등 감사 단독 기록)·`grant_event_operator`(기존 활성 회수 후 신규 부여=등급 변경 멱등)·`revoke_event_operator`(soft revoke) + `_assert_actor_super_admin`(service_role 컨텍스트용 p_actor 최고관리자 2차 재검증). 모두 anon/authenticated EXECUTE 회수. Edge Function 5종: `operator-create`(Auth 생성→RPC, 실패 시 Auth 삭제 보상, 임시 비밀번호/초대 링크)·`operator-update`(+Auth ban/unban 로그인 차단)·`operator-reset-password`(임시 비번/recovery 링크)·`event-operator-grant`·`event-operator-revoke`. 공용 `_shared/operatorAuth.ts`(호출자 JWT→`is_super_admin` 검증). **✅ 라이브 배포 완료**: `0040` `db push`(Local=Remote 0001~0040) + Edge 5종 `--use-api` deploy + 스모크(anon `grant_event_operator` RPC→`401/42501`, Edge 무인증→`401` 게이트 차단). ⚠ 풀 라운드트립(최고관리자 로그인→운영자 생성/수정/권한 부여·회수) 미검증 — 슬라이스 D UI 와 함께 검증.
 - [x] **슬라이스 D — 운영자 관리 UI (코드+배포 완료, 2026-06-28)** — 최고관리자 전용 `/admin/operators`(신규 `RequireSuperAdmin` 가드 + Sidebar `navItemsFor` 로 최고관리자에게만 메뉴 노출): 운영자 목록(요약 4지표·검색·비활성 포함·배정 행사 수·최근 로그인·생성일) + 생성/수정 모달(`OperatorFormModal`: 이메일·이름·역할·최고관리자 체크[ADMIN 한정]·비밀번호 방식[임시/초대 링크]·사유) + 비활성화·재활성화/비밀번호 재설정(`ConfirmModal` 사유 필수) + 임시 비밀번호·링크 1회 노출(`OperatorSecretModal`). 비활성 운영자는 `users_select` RLS(`deleted_at IS NULL`)에 가려지므로 최고관리자 전용 조회 RPC `admin_list_operators`(`0041`, 비활성 포함·배정 수·`auth.users.last_sign_in_at` join) 신규. 신규 파일: `types/operator.ts`, `lib/operator.ts`(순수 헬퍼+test 9), `schemas/operatorSchemas.ts`, `hooks/{useOperators,useOperatorMutations}.ts`(슬라이스 C Edge 연동), `components/admin/{OperatorTable,OperatorFormModal,OperatorSecretModal}.tsx`, `views/admin/OperatorListView.tsx`. `labels`에 OPERATOR_ROLE/PERMISSION 라벨 추가. `lint`·`typecheck`·`build`·`test`(**226**, 신규 9) 통과. **✅ 라이브 배포 완료**: `0041` `db push`(Local=Remote 0001~0041) + anon `admin_list_operators` → `42501` 차단 확인. ⚠ 풀 라운드트립(최고관리자 로그인→운영자 생성/임시비번/수정/비활성화) 미검증.
-- [~] **슬라이스 E — 행사별 권한 배정 UI (배정 부분 완료, 2026-06-28)** — 운영자 관리 화면의 운영자별 **권한 배정 모달**(`OperatorPermissionModal`, 테이블 `권한 배정` 버튼): 현재 활성 행사 권한 목록 + 부여/등급 변경(grant=기존 활성 회수 후 재부여 멱등)/회수, 모두 사유 필수. 이미 배포된 `event-operator-grant`/`event-operator-revoke` Edge 연동(`useGrantEventOperator`/`useRevokeEventOperator`), 운영자별 권한 조회 `useEventOperatorRoles`(`event_operator_roles` + `events(title)` 임베드, 최고관리자 RLS). 신규 마이그레이션 없음(0039 테이블 + 0040 Edge 재사용). `types/operator.ts`에 `EventOperatorRole` 추가. `lint`·`typecheck`·`build`·`test`(**226**) 통과. **남은 부분(→ 슬라이스 B 합류):** `내 권한 배지`와 `권한별 버튼 잠금/숨김`은 스코프가 실제 적용되는 시점에 의미가 있으므로 RLS/RPC 스코프 전환(B)과 함께 처리. ⚠ 풀 라운드트립(최고관리자 로그인→권한 부여/회수) 미검증.
-- [ ] **슬라이스 F — 통합 검증/시드**: 최고관리자·일반 관리자·스태프·뷰어 테스트 계정/시드 구성, 미배정 행사 접근 차단, 권한별 변경 가능 범위, anon/참가자 JWT 차단 검증.
+- [x] **슬라이스 E — 행사별 권한 배정 UI + 프론트 게이팅 (완료, 2026-06-28)** — 운영자 관리 화면의 운영자별 **권한 배정 모달**(`OperatorPermissionModal`, 테이블 `권한 배정` 버튼): 현재 활성 행사 권한 목록 + 부여/등급 변경(grant=기존 활성 회수 후 재부여 멱등)/회수, 모두 사유 필수. 이미 배포된 `event-operator-grant`/`event-operator-revoke` Edge 연동(`useGrantEventOperator`/`useRevokeEventOperator`), 운영자별 권한 조회 `useEventOperatorRoles`(`event_operator_roles` + `events(title)` 임베드, 최고관리자 RLS). `types/operator.ts`에 `EventOperatorRole` 추가. **프론트 게이팅(B-2 스코프 적용 후 완료, §5.1·§5.2·§5.3):** ①**페이지 게이팅** — `/admin/users`(전역 참가자 DB)·`/admin/settings`(전역 알림)·`/admin/operators` 를 `RequireSuperAdmin` 으로 이동, `navItemsFor` 가 최고관리자에게만 해당 메뉴 노출(일반 ADMIN 은 `행사 목록`만). ②**내 권한 배지 + 권한별 잠금** — `lib/eventPermission.ts`(`effectiveEventPermission`[super=OWNER 상당]·`canManage`/`canStaff`/`canView`/`hasCapability`, +test 8)·`hooks/useMyEventRoles.ts`(본인 `event_operator_roles` 활성 행 조회, super 는 쿼리 생략)·`components/admin/EventPermissionBadge`. 행사 목록 카드·상세 헤더에 `내 권한` 배지, 행사 개설/편집 버튼은 `is_super_admin`/`canManage` 로 게이팅, 일반 운영자 빈 목록은 "배정 행사 없음·운영본부 문의" 안내. ③**행사 상세 탭 능력별 노출** — `TAB_CAPABILITY`(manage/staff/view) 로 권한 미달 탭 숨김, 권한 없는 행사 직접 접근은 `권한 없음` 안내, 엑셀 내보내기는 MANAGER+. `lint`·`typecheck`·`build`·`test`(**234**, 신규 8) 통과. ⚠ 풀 라운드트립(일반 운영자 실 로그인 권한별 노출/차단)은 슬라이스 F 시드와 함께 검증.
+- [x] **슬라이스 F — 통합 검증/시드 (자동 하니스로 핵심 검증 완료, 2026-06-28)** — `scripts/verify-operator-permissions.mjs`(service_role 로 MANAGER/STAFF/VIEWER 테스트 운영자 생성·행사 A 배정→각 계정 실 로그인→단언→완전 정리). **18/18 통과**: ①권한 헬퍼 매트릭스(`can_view`/`can_staff`/`can_manage`) — MANAGER@A=T/T/T·STAFF@A=T/T/F·VIEWER@A=T/F/F, 미배정 행사 B 는 전부 F ②`events` RLS 격리(미배정 행사 조회 0행) ③RPC 가드(0043, `generate_ai_proposals`) — MANAGER@A 권한 통과(상태 오류만)·STAFF/VIEWER@A 및 MANAGER@B 는 `관리자만` 차단 ④권한 상승 차단(운영자·anon 의 `grant_event_operator` 직접 호출 `permission denied`) ⑤회수 후 권한 즉시 소멸. 최고관리자 무중단 통과는 actor 동작으로 확인. 참가자 커스텀 JWT 차단은 헬퍼 구조상(참가자=운영자 권한 0) 보장 + 기존 참가자 인증 테스트로 커버. ⚠ 잔여(선택, UI 수동): STAFF 사진/출석 실제 업로드·처리 플로우, 감사 로그 화면 표시.
+
+---
+
+### [~] Phase 9: UI/UX 전면 개편
+> 데이터 구조 변경 없이 화면/공통 컴포넌트/기능성 UI를 전면 정리하는 작업. 2026-06-28에 기능성 UI 전수 분석 및 단위 작업 문서 분해를 먼저 완료했고, **이어서 9-A~9-H 구현을 순서대로 완료(2026-06-28).** 마이그레이션 없음(순수 프론트). 9-A 디자인 토큰(상태 tone 토큰 + `lib/tone.ts` BADGE/SOLID 맵) → 9-B 공통 기능성 컴포넌트(Button 확장 + Badge/Tabs/SegmentedControl/InlineSelect/SearchableSelect/MultiSelectChips/PageToolbar/RowActionGroup/ActionMenu/FileUploadField/PhotoPicker/EmptyState/IconButton) → 9-C 사이드바 접기·헤더 위계 → 9-D 백오피스 목록(운영자/사진 상태 DataTable 전환·PageToolbar·ActionMenu) → 9-E 행사 상세(공통 Tabs·셀 tone) → 9-F 스타트업 예약(공통 slot tone) → 9-G 출석 세그먼트 공통화·PhotoPicker → 9-H 전 소스 직접 팔레트 색 0건. lint·typecheck·build·test(**268**) 통과. **⚠ 남은 검증: 반응형(360/768/1024/1440) 수동 브라우저 확인.** 기준 문서: [UI/UX Functional UI Audit](./uiux_functional_ui_audit.md), [UI/UX Rework 09 Overview](./uiux_rework_09_overview.md).
+>
+> **9-후속 사용자 피드백 반영(2026-06-28):** ①공통 `DataTable` 본문 배경 `bg-surface-raised`(흰색) — 모든 백오피스 표가 흰색 통일(투명→페이지 회색 비침 해소). ②`FilterChips` 트랙 `border`+`bg-muted`로 그라운딩(페이지와 같은 색이라 칩이 떠 보이던 문제 해소). ③공통 `Tabs` 를 **밑줄형**으로 재설계(하단 경계선+선택 브랜드 밑줄+가로 스크롤), `EventDetailView` 탭/엑셀 버튼 레이아웃 분리. ④**진행 대시보드(`TimeGridSheet`) 개편**: 예약경로(수동/AI/강제) 배지 제거, 셀 배경을 **진행 상태(진행현황) 기준**으로(대기=흰색·진행중=info·완료=success·노쇼=danger), 기업명 아래 대표자명 표기, 노쇼 처리 버튼 흰색, **[상담 시작] 버튼 신설**. ⑤**진행현황 미반영 원인 수정**: 세션 시작(WAITING→IN_PROGRESS)이 `start_counseling` 의 `expert_id=본인` 가드로 전문가 전용이라 관리자 대시보드에서 진행 전환 불가였음 → `0050_start_counseling_admin.sql`(0019 출석 대리 패턴처럼 `can_staff_event` 관리/스태프 대리 허용). **✅ `0050` db push 완료.**
+>
+> **9-후속(2): 관리자 진행 상태 전체 제어(2026-06-28, 사용자 요청 "관리자가 모든 진행현황을 다 컨트롤").** `0051_admin_set_session_status.sql`: `admin_set_session_status(p_slot_id, p_status, p_reason)` — `can_staff_event` 권한자가 대기중/진행중/완료를 자유 전환(노쇼 되돌리기 포함, 행사 PROGRESS 단계 한정, 멱등, audit_logs 기록). 완료(COMPLETED)는 관리자 운영 오버라이드로 전문가 상담일지 없이도 설정 가능(전문가 일지는 `submit_counseling_log` 로 계속 작성). 노쇼=`mark_no_show`(사유 필수)·취소=`cancel_session` 은 기존 유지. 프론트: `useSetSessionStatus` 훅 + `TimeGridSheet` 셀에 진행 상태 `SegmentedControl`[대기/진행/완료](activeTone neutral/info/success) + 노쇼 버튼. `useStartCounseling`→`useSetSessionStatus` 로 교체. **✅ `0051` db push 완료(Local=Remote 0001~0051).** lint·typecheck·build·test(**268**) 통과. ⚠ 풀 라운드트립(관리자 로그인→셀에서 진행 상태 전환·노쇼 되돌리기) 미검증.
+
+#### [x] 9-0. 기능성 UI 전수 분석 및 단위 작업 문서화
+- [x] 드롭다운, 탭, 필터칩, 토글, 모달, 테이블, 페이지네이션, 파일/사진 업로드, 출석 세그먼트, 만족도 입력, 행 액션을 전수 분석했다. → [UI/UX Functional UI Audit](./uiux_functional_ui_audit.md)
+- [x] 9번째 UI/UX 개편 작업을 단위 문서로 분해했다. → [UI/UX Rework 09 Overview](./uiux_rework_09_overview.md)
+- [x] `development_status.md`에는 구현 완료가 아니라 작업 예정 태스크로 반영한다.
+
+#### [x] 9-A. 디자인 토큰과 시각 언어 (완료, 2026-06-28)
+> **순수 프론트(마이그레이션 없음).** `src/index.css @theme` 에 상태 tone 토큰(success/warning/danger/info/ai 각 `*` 텍스트 + `*-surface` 연한 배경 + `*-border` 경계 3종) + `surface-raised(#fff)` 추가. 신규 `src/lib/tone.ts`(`Tone` 타입 + `BADGE_TONE`[연한 배경 배지용]·`SOLID_TONE`[채움 강조용] 맵 + `badgeTone`/`solidTone` 헬퍼) 로 의미 tone → 클래스 매핑을 일원화. 직접 Tailwind 팔레트 색을 쓰던 상태 표시를 tone 으로 전환: `EventStatusBadge`(DRAFT=muted/BOOKING=info/ALLOCATION=ai/PROGRESS=success/FINISHED=neutral/CANCELLED=danger), `EventPermissionBadge`(OWNER=brand/MANAGER=info/STAFF=neutral/VIEWER=muted), `SessionStatusBadge`, `NotificationLogPanel` 상태 배지, `slotCellStyles`(예약 가능·내 예약=success), `ExpertAttendanceControl`·`TimeGridSheet` 출석 세그먼트(출석=success/불참=danger/미정=muted, 관리자·전문가 공통), `labels.DISPATCH_MODE_LABELS`. 폰트는 기존 `--font-sans` Pretendard 유지 확인(별도 폰트 미지정 원칙). `lint`·`typecheck`·`build`·`test`(**268**, 신규 `tone.test.ts` 4) 통과. 기준 문서: [9-A 디자인 토큰](./uiux_rework_09_a_design_tokens.md).
+- [x] 색상, 상태 tone, radius, shadow, spacing 기준을 확정한다. → 색상 tone 토큰 + tone map 확정. radius/shadow 는 9-B 공통 컴포넌트에서 컴포넌트별로 소비(기준값=문서 §4).
+- [x] 전 영역 기본 폰트는 Pretendard로 통일하고, 폰트 크기는 국내 서비스형 UI 기준에 맞춰 정의한다. → `--font-sans` Pretendard 유지(전 영역 단일 폰트), 타이포 위계 기준은 문서 §5.
+- [x] `brand`, `success`, `warning`, `danger`, `info`, `ai`, `neutral` tone을 공통 규칙으로 정리한다. → `src/lib/tone.ts` `BADGE_TONE`/`SOLID_TONE` + `index.css` 토큰.
+- [x] 상태 배지, 알림, 출석, 슬롯, AI 배정 색상을 직접 Tailwind 색상 대신 tone map으로 연결한다. → 위 6개 컴포넌트 + labels 전환. (행사 상세 셀의 예약경로·AI 배정 보드 색은 9-E 에서 함께 tone 화.)
+
+#### [x] 9-B. 공통 기능성 컴포넌트 (완료, 2026-06-28)
+> **순수 프론트(마이그레이션 없음).** 기능성 UI 공통 컴포넌트 라이브러리를 구축하고 일부 화면에 도입(전면 적용은 9-C~9-G). `Button` 확장(variant `primary/outline/danger/ghost/subtle` + size `sm/md/lg`(기본 md=기존 스타일 유지) + `leftIcon/rightIcon/fullWidth`). 신규 공통 컴포넌트 11종(`src/components/common/`): `IconButton`(아이콘 단독, aria-label 강제)·`Badge`(9-A tone 기반 상태/권한/메타)·`EmptyState`(빈/권한없음/검색없음)·`Tabs`(pill 영역 전환·카운트)·`SegmentedControl`(작은 전환·출석 선택, activeTone)·`PageToolbar`(검색+필터+우측 액션)·`RowActionGroup`(행 액션 나열)·`ActionMenu`(접는 더보기, 바깥클릭/Esc)·`InlineSelect`(셀 내 컴팩트 select)·`SearchableSelect`(긴 목록 검색형 단일선택)·`MultiSelectChips`(칩 토글 다중선택)·`FileUploadField`(단일 파일)·`PhotoPicker`(촬영/갤러리+대기 미리보기). **도입 반영(중복 제거)**: `EventStatusBadge`/`EventPermissionBadge`/`SessionStatusBadge`→`Badge`, `FieldMultiSelect`→`MultiSelectChips`, `ParticipantFileInput`→`FileUploadField`, `CompanyPhotoUploadPanel`→`PhotoPicker`. `lint`·`typecheck`·`build`·`test`(**268**) 통과. 기준 문서: [9-B 공통 기능성 컴포넌트](./uiux_rework_09_b_functional_components.md).
+- [x] Button variant/size/icon/loading 규칙을 확장한다. → variant 5종·size 3종·leftIcon/rightIcon/fullWidth 추가(기본값은 기존 스타일 보존).
+- [x] `Badge`, `Tabs`, `SegmentedControl`, `InlineSelect`, `SearchableSelect`, `MultiSelectChips`, `PageToolbar`, `RowActionGroup`, `ActionMenu`, `FileUploadField`, `PhotoPicker`, `EmptyState` 도입 범위를 확정한다. → 12종 + `IconButton` 신설(기존 `DataTable`/`FilterBar`/`Toggle`/`Modal` 재사용). 화면 전면 적용은 9-C~9-G.
+- [x] 직접 `<select>`와 직접 구현 탭/칩을 의도별 공통 컴포넌트로 분류한다. → 폼=`SelectField` / 셀=`InlineSelect` / 긴 목록=`SearchableSelect` / 다중=`MultiSelectChips`; 영역 탭=`Tabs` / 작은 전환·출석=`SegmentedControl` / 필터 전용=`FilterChips`(기존). 화면별 치환은 후속 단계에서 수행.
+
+#### [x] 9-C. 앱 쉘과 내비게이션 (완료, 2026-06-28)
+> **순수 프론트(마이그레이션 없음).** `uiStore` 에 `sidebarCollapsed`(데스크톱 접힘, zustand persist `partialize` 로 localStorage 유지·모바일 드로어 상태는 비영속) + `toggleSidebarCollapsed`/`setSidebarCollapsed` 추가. `navigation.ts` `NavItem` 에 `icon` 글리프 필드 추가(역할별 메뉴·`navItemsFor` 전부 채움). `Sidebar`: 데스크톱 폭 펼침 `lg:w-60`/접힘 `lg:w-16`(아이콘만+`title` tooltip), 헤더에 접기/펼치기 토글(«/», 데스크톱 전용), 접힘 시 로고/역할/라벨 숨기고 아이콘 중앙 정렬, active 상태는 양쪽 모두 브랜드 채움 유지. 모바일 슬라이드인은 항상 펼친 폭으로 기존 동작 보존. `Header`: 역할 배지(최고관리자=brand tone)+사용자명 위계 정리, 9-B `Badge`/`Button` 사용, 배경 `surface-raised`. `lint`·`typecheck`·`build`·`test`(**268**) 통과. 기준 문서: [9-C 앱 쉘과 내비게이션](./uiux_rework_09_c_shell_navigation.md).
+- [x] 데스크톱 사이드바 접기/펼치기 기능을 추가한다. → `uiStore.sidebarCollapsed`(영속) + Sidebar 토글 버튼(데스크톱 전용), 펼침 240px/접힘 64px.
+- [x] collapsed 상태에서 아이콘/tooltip 기반 메뉴 표시를 제공한다. → `NavItem.icon` 글리프 + 접힘 시 라벨 숨김·`title` tooltip, active 표시 양 상태 공통.
+- [x] Header의 사용자/역할/로그아웃/현재 상태 표시 위계를 정리한다. → 역할 배지(최고관리자 강조)+사용자명+로그아웃(공통 Button). 행사 진행 카운트다운 등 상황 배지는 해당 화면(전문가 대시보드)에서 연결.
+
+#### [x] 9-D. 관리자 백오피스 목록 화면 (완료, 2026-06-28)
+> **순수 프론트(마이그레이션 없음).** 직접 table/list 가 남아있던 화면을 8-C `DataTable`+9-B `PageToolbar`/`ActionMenu`/`RowActionGroup` 로 통일. **운영자 관리**: 직접 `<table>`(`OperatorTable`) 제거 → 신규 `operatorColumns.tsx`(컬럼+정렬+검색 헬퍼, 역할/상태=`Badge`, 4행액션=`ActionMenu`) + `OperatorListView` 를 `useDataTable`+`DataTable`+`Pagination`+`PageToolbar`(검색·활성 필터칩) 로 재작성. **사진 상태**(`PhotoStatusPanel`): 직접 table → `DataTable`(정렬·검색·30 페이지네이션)+`PageToolbar`, 미등록=`Badge` warning·사진수=success tone, 검수 펼침 행액션=`RowActionGroup`(표 하단 패널 유지). **참가자 DB**(`ParticipantDbView`): `FilterBar`→`PageToolbar`(검색+필터칩+진단토글 + 우측 CSV/추가 액션 통합). **행사 목록**(`EventListView`): 직접 상태탭 버튼 → `FilterChips`, 카드 빈 화면 → 공통 `EmptyState`(search/denied/기본 variant). 알림 로그·상담일지 결과·참가자 지정 명단은 8-J 에서 이미 `DataTable` 적용(검색/필터/정렬/30 규칙 공유). `lint`·`typecheck`·`build`·`test`(**268**) 통과. 기준 문서: [9-D 관리자 백오피스 목록 화면](./uiux_rework_09_d_admin_backoffice.md).
+- [x] 행사 목록, 참가자 DB, 운영자 목록, 알림 로그, 상담일지 결과, 사진 상태, 참가자 지정 목록의 검색/필터/테이블 규칙을 통일한다. → 7개 화면 전부 `DataTable`(검색·필터·정렬·30 페이지네이션) 규칙 공유. 운영자/사진 상태는 이번에 전환, 나머지는 8-A/8-B/8-J 계승.
+- [x] 대량 데이터 화면은 `DataTable` + `PageToolbar` + `Pagination` 중심으로 정리한다. → 운영자/사진/참가자 DB 에 `PageToolbar` 적용, 전 화면 `DataTable`+`Pagination`.
+- [x] row action은 `RowActionGroup` 또는 `ActionMenu`로 통합한다. → 운영자=`ActionMenu`(4액션 접기), 사진 검수=`RowActionGroup`. (참가자 DB 의 셀 액션 칩은 8-B 기존 유지.)
+
+#### [x] 9-E. 행사 상세 대시보드 (완료, 2026-06-28)
+> **순수 프론트(마이그레이션 없음).** `EventDetailView` 의 직접 구현 탭 버튼 묶음(10탭)을 9-B 공통 `Tabs`(pill·`ariaLabel`·권한별 `visibleTabs`)로 전환 — 상태별 기본 진입·권한 미달 탭 숨김 로직은 보존. 9-A 에서 미뤘던 진행 현황 셀 색을 tone 화: `TimeGridSheet`·`BookingScheduleTable` 예약 경로 셀(수동=success / AI=ai / 강제=warning, 셀 배경=`*-surface`·태그=`/15`)과 세션 상태 미니 배지(대기=muted/진행=info/완료=success/노쇼=danger), 범례 포함. 헤더(`EventDetailHeader`)·권한 배지(`EventPermissionBadge`, 9-B Badge)·운영자 배정 버튼·설정 모달 진입(8-F "…설정" 버튼)·출석 세그먼트(9-A tone)·결과 탭 테이블 규칙(9-D)은 기존 정비분을 그대로 활용. `lint`·`typecheck`·`build`·`test`(**268**) 통과. 기준 문서: [9-E 행사 상세 대시보드](./uiux_rework_09_e_event_detail.md).
+- [x] 행사 상세 탭을 공통 `Tabs` 체계로 전환한다. → `EventDetailView` 탭을 공통 `Tabs` 로 교체(권한·상태 기본 진입 로직 유지).
+- [x] 행사 헤더, 권한 배지, 설정 버튼, 결과 패널, 진행 현황 UI의 위계를 정리한다. → 헤더/권한 배지/설정 버튼은 기존(8-D~8-F) 구조 유지, 진행 현황·예약 배치 셀/세션 배지 색을 공통 tone 으로 통일. (별도 PageHeader/ResultPanel 래퍼는 기존 EventDetailHeader·결과 패널로 충족.)
+- [x] 상담일지/만족도/사진/알림 결과 화면의 검색/필터/내보내기 위치를 통일한다. → 상담일지·알림 로그·사진 상태는 9-D `DataTable`+`PageToolbar` 규칙 공유, 만족도 결과는 8-J 결정대로 집계/CSV 리포트 유지.
+
+#### [x] 9-F. 스타트업 예약 UX (완료, 2026-06-28)
+> **순수 프론트(마이그레이션 없음).** 예약 보기 구조 재편(시간대별 기본 탭 승격·전문가 프로필 카드 보기)은 8-I 에서 완료됐고, 9-F 는 **공통 slot 규칙 tone 통일**을 마무리. 슬롯 상태 단일 소스 `slotCellStyles.CELL`(+`cellStateOf`, 두 보기 공유)이 9-A success tone 을 쓰도록 정리돼 있고, 잔여 직접 색을 제거: `BookingSlotsGrid` 범례(신청 가능/내 예약=success), `TimeMatrixGrid` 포커스 링(`ring-success`), `ExpertBookingList`(예약함 배지·추가 예약 안내=success surface/text), `MyBookingList` 예약 현황 배지(success surface). 만족도 입력은 8-G `surfaceFields`(rating/options/text 위젯)로 이미 정리됐고 행사/전문가 만족도는 정책별 `SatisfactionPanel`/`ExpertSatisfactionPanel` 로 구분 노출(8-G). `lint`·`typecheck`·`build`·`test`(**268**) 통과. 기준 문서: [9-F 스타트업 예약 UX](./uiux_rework_09_f_startup_booking.md).
+- [x] 모바일 기본 예약 보기를 시간대 중심으로 재검토한다. → 8-I 에서 `BookingSlotsGrid` 기본 탭 `time`(시간대별) 승격(모바일 우선).
+- [x] 전문가별 보기는 프로필 카드, 분야, 소개, 가능 시간 중심으로 재구성한다. → 8-I `ExpertBookingList`(아바타·이름·소속·직책·분야칩·소개+가능 시간 칩).
+- [x] 예약 가능/마감/내 예약/신청 불가 상태를 공통 slot UI로 표현한다. → `slotCellStyles.CELL`+`cellStateOf` 단일 소스(두 보기 공유) + 9-A success/neutral tone 통일, 범례·포커스·배지 직접 색 제거.
+
+#### [x] 9-G. 전문가/현장 모바일 UX (완료, 2026-06-28)
+> **순수 프론트(마이그레이션 없음).** 출석 세그먼트를 공통화: 신규 `AttendanceSegmentedControl`(9-B `SegmentedControl` 기반, 미정=muted/출석=success/불참=danger, label·size·layout·showText 옵션) 로 추출하고 `ExpertAttendanceControl`(전문가)·`TimeGridSheet`(관리자 진행, 컴팩트 inline+마크) 양쪽이 같은 컴포넌트를 공유(각자의 로컬 세그먼트 구현 제거). 현장 사진 촬영/갤러리/미리보기/업로드는 9-B `PhotoPicker` 로 이미 통일(`CompanyPhotoUploadPanel`). 기업 리스트(`CompanyPhotoList`) 사진 있음/미등록을 공통 `Badge`(success/warning) 로 교체. 잔여 직접 색 tone 화: `CounselingLogSummary`(의견 공개=success), `CountdownTimer`(임박=danger), `ExpertScheduleList`(출석 칩 success/danger). `lint`·`typecheck`·`build`·`test`(**268**) 통과. 기준 문서: [9-G 전문가/현장 모바일 UX](./uiux_rework_09_g_field_mobile.md).
+- [x] 전문가 현재 상담 카드와 상담일지 작성 흐름을 모바일 현장 사용 기준으로 개선한다. → 활성 세션 카드·상담일지 모달은 기존(Phase 6) 구조 유지, 출석/상태 색을 공통 tone·컴포넌트로 정리(카운트다운 임박=danger, 출석 칩 tone 통일).
+- [x] 출석 세그먼트를 관리자/전문가 화면 공통 규칙으로 정리한다. → `AttendanceSegmentedControl` 신설, 관리자(TimeGridSheet)·전문가(ExpertAttendanceControl) 공유.
+- [x] 현장 사진 촬영/갤러리 선택/미리보기/업로드/삭제 흐름을 `PhotoPicker` 패턴으로 정리한다. → 9-B `PhotoPicker` 적용(`CompanyPhotoUploadPanel`), 기업 리스트 상태 `Badge` 화. (삭제는 기존 ConfirmModal 유지.)
+
+#### [~] 9-H. 적용 순서와 검증 (코드 완료, 2026-06-28)
+> **순수 프론트(마이그레이션 없음).** 9-A~9-G 를 문서 순서(토큰→컴포넌트→쉘→목록→상세→예약→현장)대로 적용 완료. 마무리로 **전 소스의 직접 Tailwind 팔레트 색(emerald/violet/blue/amber/orange/red/green/yellow/gray 계열 숫자 음영)을 0건으로 제거** — 남아있던 AI 배정 보드(`ProposalSlotCard`/`AllocationSlotBoard`/`AllocationToolbar`: 확정=success·AI 제안=ai·충돌=danger·분야불일치=warning), 진행 현황(`ProgressDashboardPanel` 실시간 인디케이터·범례), 결과 패널(`CounselingReportPanel`), 알림 게이트 미리보기(`EventNotificationSettingsPanel`), 빌더 기본항목 배지(`CounselingBuilderPanel`)까지 9-A tone 으로 통일. 명령 검증 4종 통과: `lint`(0 warn)·`typecheck`·`build`·`test`(**268**). 기준 문서: [9-H 적용 순서와 검증](./uiux_rework_09_h_rollout_verification.md).
+- [x] 단계별 적용 순서와 회귀 검증 기준을 따른다. → 9-A→9-G 순차 적용, 각 단계마다 4종 명령 검증 통과(기능 회귀 없음).
+- [ ] 모바일 360px, 태블릿 768px, 노트북 1024px, 데스크톱 1440px 기준으로 반응형을 확인한다. → ⚠ **수동 브라우저 검증 권장**(헤드리스 자동화 불가): 사이드바 접기/펼치기, 목록 테이블 가로 스크롤, 탭 overflow, 모달 높이.
+- [x] `npm run lint`, `npm run typecheck`, `npm run build`, `npm run test`를 통과시킨다. → 전부 통과(test 268).
 
 ---
 

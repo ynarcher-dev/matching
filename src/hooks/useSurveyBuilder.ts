@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { cleanOptions, needsOptions } from '@/lib/surveyBuilder';
-import type { SurveyQuestion, SurveyQuestionInput } from '@/types/satisfaction';
+import type { SurveyQuestion, SurveyQuestionInput, SurveyScope } from '@/types/satisfaction';
 
 /**
  * 만족도 조사 관리자 빌더 데이터 (operator supabase 클라이언트).
@@ -12,10 +12,11 @@ import type { SurveyQuestion, SurveyQuestionInput } from '@/types/satisfaction';
 
 export const surveyBuilderKeys = {
   questions: (eventId: string) => ['survey-builder', eventId, 'questions'] as const,
-  responseCount: (eventId: string) => ['survey-builder', eventId, 'response-count'] as const,
+  responseCount: (eventId: string, scope: SurveyScope) =>
+    ['survey-builder', eventId, 'response-count', scope] as const,
 };
 
-/** 행사의 모든 만족도 문항(역할·순서 정렬). 빌더가 탭으로 분리해 보여준다. */
+/** 행사의 모든 만족도 문항(스코프·역할·순서 정렬). 빌더가 스코프/탭으로 분리해 보여준다. */
 export function useEventSurveyQuestions(eventId: string) {
   return useQuery<SurveyQuestion[]>({
     queryKey: surveyBuilderKeys.questions(eventId),
@@ -24,9 +25,10 @@ export function useEventSurveyQuestions(eventId: string) {
       const { data, error } = await supabase
         .from('survey_questions')
         .select(
-          'id,event_id,target_role,question_type,title,description,options,is_required,order_no',
+          'id,event_id,survey_scope,target_role,question_type,title,description,options,is_required,order_no',
         )
         .eq('event_id', eventId)
+        .order('survey_scope', { ascending: true })
         .order('target_role', { ascending: true })
         .order('order_no', { ascending: true })
         .returns<SurveyQuestion[]>();
@@ -36,16 +38,17 @@ export function useEventSurveyQuestions(eventId: string) {
   });
 }
 
-/** 이 행사에 제출된 응답 수(편집 잠금 판정용). */
-export function useEventSurveyResponseCount(eventId: string) {
+/** 이 행사·스코프에 제출된 응답 수(편집 잠금 판정용). */
+export function useEventSurveyResponseCount(eventId: string, scope: SurveyScope = 'EVENT') {
   return useQuery<number>({
-    queryKey: surveyBuilderKeys.responseCount(eventId),
+    queryKey: surveyBuilderKeys.responseCount(eventId, scope),
     enabled: Boolean(eventId),
     queryFn: async () => {
       const { count, error } = await supabase
         .from('survey_responses')
         .select('id', { count: 'exact', head: true })
-        .eq('event_id', eventId);
+        .eq('event_id', eventId)
+        .eq('survey_scope', scope);
       if (error) throw error;
       return count ?? 0;
     },
@@ -55,6 +58,7 @@ export function useEventSurveyResponseCount(eventId: string) {
 /** 입력값을 survey_questions 컬럼 행으로 변환(event_id 제외 — 객관식만 옵션 보존). */
 function toRow(input: SurveyQuestionInput) {
   return {
+    survey_scope: input.survey_scope,
     target_role: input.target_role,
     question_type: input.question_type,
     title: input.title.trim(),
@@ -111,18 +115,40 @@ export function useDeleteQuestion(eventId: string) {
   });
 }
 
-/** 두 문항의 순서(order_no)를 맞바꾼다(▲/▼ 이동). */
-export function useSwapQuestionOrder(eventId: string) {
-  const invalidate = useInvalidateQuestions(eventId);
+/**
+ * 드래그앤드롭 재정렬 — 여러 문항의 order_no 를 한 번에 갱신한다.
+ * 기존 order_no 값 집합을 새 순서에 그대로 재배치하므로 값 공간이 보존된다.
+ * 낙관적 업데이트로 드롭 즉시 화면에 반영하고, 실패 시 롤백한다.
+ */
+export function useReorderQuestions(eventId: string) {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (pair: [{ id: string; order_no: number }, { id: string; order_no: number }]) => {
-      const [a, b] = pair;
-      const r1 = await supabase.from('survey_questions').update({ order_no: b.order_no }).eq('id', a.id);
-      if (r1.error) throw new Error(r1.error.message);
-      const r2 = await supabase.from('survey_questions').update({ order_no: a.order_no }).eq('id', b.id);
-      if (r2.error) throw new Error(r2.error.message);
+    mutationFn: async (updates: { id: string; order_no: number }[]) => {
+      if (updates.length === 0) return;
+      const results = await Promise.all(
+        updates.map((u) =>
+          supabase.from('survey_questions').update({ order_no: u.order_no }).eq('id', u.id),
+        ),
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw new Error(failed.error.message || '순서를 변경하지 못했습니다.');
     },
-    onSuccess: invalidate,
+    onMutate: async (updates) => {
+      await qc.cancelQueries({ queryKey: surveyBuilderKeys.questions(eventId) });
+      const prev = qc.getQueryData<SurveyQuestion[]>(surveyBuilderKeys.questions(eventId));
+      if (prev) {
+        const next = new Map(updates.map((u) => [u.id, u.order_no]));
+        qc.setQueryData<SurveyQuestion[]>(
+          surveyBuilderKeys.questions(eventId),
+          prev.map((q) => (next.has(q.id) ? { ...q, order_no: next.get(q.id)! } : q)),
+        );
+      }
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(surveyBuilderKeys.questions(eventId), ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: surveyBuilderKeys.questions(eventId) }),
   });
 }
 

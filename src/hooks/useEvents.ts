@@ -6,7 +6,7 @@ import type { EventRow, EventWithCounts } from '@/types/event';
 const EVENT_COLUMNS =
   'id,title,status,status_override,status_override_reason,booking_start,booking_end,' +
   'event_start,event_end,max_sessions_per_startup,allow_startup_self_booking,' +
-  'allow_duplicate_expert,timezone,created_at';
+  'allow_duplicate_expert,satisfaction_policy,timezone,created_at';
 
 export const eventKeys = {
   all: ['events'] as const,
@@ -48,8 +48,9 @@ export function useEvents() {
         counts.set(p.event_id, c);
       }
 
-      return events.map((e) => ({
+      return events.map((e, index) => ({
         ...e,
+        no: events.length - index,
         expertCount: counts.get(e.id)?.expert ?? 0,
         startupCount: counts.get(e.id)?.startup ?? 0,
       }));

@@ -12,7 +12,7 @@ import type {
 const EVENT_DETAIL_COLUMNS =
   'id,title,status,status_override,status_override_reason,booking_start,booking_end,' +
   'event_start,event_end,max_sessions_per_startup,allow_startup_self_booking,' +
-  'allow_duplicate_expert,timezone,created_at';
+  'allow_duplicate_expert,satisfaction_policy,timezone,created_at';
 
 export const eventDetailKeys = {
   root: (eventId: string) => ['event-detail', eventId] as const,
@@ -105,17 +105,34 @@ export function useAssignableUsers() {
     queryKey: eventDetailKeys.assignable,
     staleTime: 1000 * 60,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('users')
-        .select(
-          'id,name,role,company_name,representative_name,expert_organization,expert_position',
-        )
-        .is('deleted_at', null)
-        .in('role', ['EXPERT', 'STARTUP'])
-        .order('name', { ascending: true })
-        .returns<AssignableUser[]>();
-      if (error) throw error;
-      return data ?? [];
+      const [usersRes, fieldsRes] = await Promise.all([
+        supabase
+          .from('users')
+          .select(
+            'id,name,role,company_name,representative_name,contact_name,company_homepage,' +
+              'expert_organization,expert_position,' +
+              'email,phone_number,company_description,expert_description,proposal_file_url,' +
+              'last_login_at,created_at',
+          )
+          .is('deleted_at', null)
+          .in('role', ['EXPERT', 'STARTUP'])
+          .order('name', { ascending: true }),
+        supabase.from('user_fields').select('user_id,field_id'),
+      ]);
+      if (usersRes.error) throw usersRes.error;
+      if (fieldsRes.error) throw fieldsRes.error;
+
+      const fieldsByUser = new Map<string, string[]>();
+      for (const r of (fieldsRes.data ?? []) as { user_id: string; field_id: string }[]) {
+        const arr = fieldsByUser.get(r.user_id) ?? [];
+        arr.push(r.field_id);
+        fieldsByUser.set(r.user_id, arr);
+      }
+
+      return ((usersRes.data ?? []) as unknown as Omit<AssignableUser, 'field_ids'>[]).map((u) => ({
+        ...u,
+        field_ids: fieldsByUser.get(u.id) ?? [],
+      }));
     },
   });
 }

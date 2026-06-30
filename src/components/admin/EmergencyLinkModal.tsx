@@ -3,12 +3,11 @@ import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
 import { Alert } from '@/components/common/Alert';
 import { useIssueEmergencyToken } from '@/hooks/useUserMutations';
-import type { ParticipantWithAuth } from '@/types/user';
 
 interface EmergencyLinkModalProps {
   open: boolean;
   onClose: () => void;
-  user: ParticipantWithAuth | null;
+  user: { id: string; name: string } | null;
 }
 
 /** 발급된 평문 토큰으로 현장 로그인 링크를 구성한다(서버는 해시만 보관). */

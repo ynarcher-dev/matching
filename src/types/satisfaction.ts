@@ -15,10 +15,17 @@ export type SurveyQuestionType =
 /** 문항 대상 역할. */
 export type SurveyTargetRole = 'STARTUP' | 'EXPERT' | 'ALL';
 
+/**
+ * 설문 스코프 (8-G).
+ * - EVENT : 행사 전체 만족도(행사당 1회). - EXPERT : 전문가별 만족도(상담 슬롯당 1회).
+ */
+export type SurveyScope = 'EVENT' | 'EXPERT';
+
 /** survey_questions 한 행(설문 렌더용). */
 export interface SurveyQuestion {
   id: string;
   event_id: string;
+  survey_scope: SurveyScope;
   target_role: SurveyTargetRole;
   question_type: SurveyQuestionType;
   title: string;
@@ -60,6 +67,7 @@ export type SurveyDraft = Record<
 
 /** 관리자 빌더 — 문항 생성/수정 입력(서버 컬럼 매핑 전 폼 결과). */
 export interface SurveyQuestionInput {
+  survey_scope: SurveyScope;
   target_role: SurveyTargetRole;
   question_type: SurveyQuestionType;
   title: string;
@@ -77,4 +85,29 @@ export interface PublicComment {
   start_time: string;
   content: string;
   submitted_at: string;
+}
+
+/**
+ * 전문가별 만족도에서 스타트업이 응답할 수 있는 상담 슬롯 1건
+ * (list_my_consulted_experts RPC 반환). 취소·노쇼 제외.
+ */
+export interface ConsultedExpertSlot {
+  slot_id: string;
+  expert_id: string;
+  expert_name: string;
+  expert_organization: string | null;
+  start_time: string;
+  end_time: string;
+  session_status: string;
+  /** 이 슬롯에 이미 전문가 만족도를 제출했는지. */
+  responded: boolean;
+}
+
+/** 내가 제출한 전문가 만족도 1건(슬롯 단위, +답변). */
+export interface MyExpertSurveyResponse {
+  id: string;
+  slot_id: string;
+  target_expert_id: string;
+  submitted_at: string;
+  answers: SurveyAnswerRow[];
 }

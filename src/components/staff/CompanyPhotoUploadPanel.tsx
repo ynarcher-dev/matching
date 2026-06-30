@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/common/Button';
+import { useEffect, useState } from 'react';
 import { Alert } from '@/components/common/Alert';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
+import { PhotoPicker } from '@/components/common/PhotoPicker';
 import {
   PHOTO_ACCEPT_ATTR,
   PHOTO_MAX_PER_COMPANY,
@@ -37,8 +37,6 @@ export function CompanyPhotoUploadPanel({
   const [localError, setLocalError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<CompanyPhotoRow | null>(null);
-  const cameraRef = useRef<HTMLInputElement>(null);
-  const galleryRef = useRef<HTMLInputElement>(null);
 
   const upload = useUploadCompanyPhotos(eventId);
   const remove = useDeleteCompanyPhoto(eventId);
@@ -77,8 +75,6 @@ export function CompanyPhotoUploadPanel({
       next.push({ file, url: URL.createObjectURL(file) });
     }
     setPending((cur) => [...cur, ...next]);
-    if (cameraRef.current) cameraRef.current.value = '';
-    if (galleryRef.current) galleryRef.current.value = '';
   };
 
   const removePending = (idx: number) => {
@@ -113,65 +109,20 @@ export function CompanyPhotoUploadPanel({
         <p className="text-xs text-neutral-base/70">{company.contactName}</p>
       </div>
 
-      {/* 카메라 촬영 input */}
-      <input
-        ref={cameraRef}
-        type="file"
+      <PhotoPicker
         accept={PHOTO_ACCEPT_ATTR}
-        capture="environment"
-        className="hidden"
-        onChange={(e) => onPick(e.target.files)}
+        onPick={onPick}
+        pending={pending}
+        onRemovePending={removePending}
+        onUpload={onUpload}
+        uploading={upload.isPending}
       />
-      {/* 앨범 선택 input */}
-      <input
-        ref={galleryRef}
-        type="file"
-        accept={PHOTO_ACCEPT_ATTR}
-        multiple
-        className="hidden"
-        onChange={(e) => onPick(e.target.files)}
-      />
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => cameraRef.current?.click()}>
-          사진 촬영
-        </Button>
-        <Button variant="outline" onClick={() => galleryRef.current?.click()}>
-          앨범에서 선택
-        </Button>
-        {pending.length > 0 && (
-          <Button onClick={onUpload} loading={upload.isPending}>
-            {pending.length}장 업로드
-          </Button>
-        )}
-      </div>
 
       {localError && <Alert tone="error">{localError}</Alert>}
       {upload.isError && (
         <Alert tone="error">업로드 중 오류가 발생했습니다. 다시 시도해 주세요.</Alert>
       )}
       {result && <Alert tone="info">{result}</Alert>}
-
-      {/* 업로드 대기 미리보기 */}
-      {pending.length > 0 && (
-        <div>
-          <p className="mb-1.5 text-sm font-semibold text-neutral-base">업로드 대기 {pending.length}장</p>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {pending.map((p, i) => (
-              <div key={p.url} className="relative aspect-square overflow-hidden rounded-lg border border-border">
-                <img src={p.url} alt="" className="h-full w-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => removePending(i)}
-                  className="absolute right-1 top-1 rounded-full bg-black/60 px-1.5 text-xs font-bold text-white"
-                  aria-label="대기 사진 제거"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* 등록된 사진 */}
       <div>

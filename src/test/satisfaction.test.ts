@@ -7,6 +7,7 @@ import type { SurveyDraft, SurveyQuestion } from '@/types/satisfaction';
 function q(partial: Partial<SurveyQuestion> & Pick<SurveyQuestion, 'id' | 'question_type'>): SurveyQuestion {
   return {
     event_id: 'e0000000-0000-4000-8000-000000000001',
+    survey_scope: 'EVENT',
     target_role: 'STARTUP',
     title: '문항',
     description: null,

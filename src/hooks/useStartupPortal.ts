@@ -1,5 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { participantClient } from '@/lib/participantClient';
+import {
+  createSignedUrlsWithClient,
+  uploadParticipantFileWithClient,
+} from '@/lib/storage';
 import type { EventRow } from '@/types/event';
 import type { MatchingSlotRow } from '@/types/eventDetail';
 import type { PortalExpert } from '@/types/startupBooking';
@@ -14,7 +18,7 @@ import type { PortalExpert } from '@/types/startupBooking';
 const EVENT_COLUMNS =
   'id,title,status,status_override,status_override_reason,booking_start,booking_end,' +
   'event_start,event_end,max_sessions_per_startup,allow_startup_self_booking,' +
-  'allow_duplicate_expert,timezone,created_at';
+  'allow_duplicate_expert,satisfaction_policy,timezone,created_at';
 
 /** 슬롯 실시간 갱신 폴링 간격(ms). 예약/취소 즉시 공개 반영. */
 export const PORTAL_POLL_MS = 10000;
@@ -24,7 +28,75 @@ export const portalKeys = {
   experts: (eventId: string) => ['portal', 'experts', eventId] as const,
   tables: (eventId: string) => ['portal', 'tables', eventId] as const,
   slots: (eventId: string) => ['portal', 'slots', eventId] as const,
+  proposal: (userId: string) => ['portal', 'proposal', userId] as const,
+  avatars: (eventId: string, cacheKey: string) =>
+    ['portal', 'avatars', eventId, cacheKey] as const,
 };
+
+/** 스타트업 본인 소개서(IR) 업로드 현황. */
+export interface MyProposal {
+  /** 저장된 Storage 객체 경로(`proposals/...`). 미업로드면 null. */
+  filePath: string | null;
+  /** 마지막 업로드 시각(0046 트리거). 미업로드면 null. */
+  uploadedAt: string | null;
+}
+
+/** 스타트업 본인 IR/소개서 업로드 상태(users 본인 행, RLS users_select 허용). */
+export function useMyProposal(userId: string) {
+  return useQuery<MyProposal>({
+    queryKey: portalKeys.proposal(userId),
+    enabled: Boolean(userId),
+    queryFn: async () => {
+      const { data, error } = await participantClient
+        .from('users')
+        .select('proposal_file_url,proposal_uploaded_at')
+        .eq('id', userId)
+        .maybeSingle<{ proposal_file_url: string | null; proposal_uploaded_at: string | null }>();
+      if (error) throw error;
+      return {
+        filePath: data?.proposal_file_url ?? null,
+        uploadedAt: data?.proposal_uploaded_at ?? null,
+      };
+    },
+  });
+}
+
+/**
+ * 스타트업 본인 IR/소개서 업로드·교체·해제.
+ * 업로드: Storage(proposals 버킷, 0007 RLS 소유자 허용) → set_my_proposal_file RPC 로 컬럼 갱신.
+ *   업로드마다 고유 경로(proposals/{id}/{uuid}.pdf)에 저장하고, 파일명/크기를 함께 넘겨
+ *   RPC 가 변경 이력(proposal_uploads)을 타임라인에 적재한다(0052).
+ * 해제: 컬럼만 비운다(참조 제거). 과거본은 타임라인 열람을 위해 Storage 에 보존(삭제하지 않음).
+ */
+export function useSetMyProposal(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      arg: { file: File } | { clear: true; currentPath: string | null },
+    ) => {
+      if ('file' in arg) {
+        const path = await uploadParticipantFileWithClient(
+          participantClient,
+          'STARTUP',
+          userId,
+          arg.file,
+        );
+        const { error } = await participantClient.rpc('set_my_proposal_file', {
+          p_file_url: path,
+          p_file_name: arg.file.name,
+          p_file_size: arg.file.size,
+        });
+        if (error) throw rpcError(error);
+        return;
+      }
+      const { error } = await participantClient.rpc('set_my_proposal_file', {
+        p_file_url: null,
+      });
+      if (error) throw rpcError(error);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: portalKeys.proposal(userId) }),
+  });
+}
 
 /** 내가 참가한 활성 행사 목록(RLS 자동 제한). DRAFT/CANCELLED 제외, 행사 시작순. */
 export function useMyEvents() {
@@ -54,6 +126,7 @@ interface ExpertUserRow {
   expert_organization: string | null;
   expert_position: string | null;
   expert_description: string | null;
+  profile_image_url: string | null;
 }
 interface UserFieldRow {
   user_id: string;
@@ -86,7 +159,9 @@ export function useEventExperts(eventId: string) {
       const [usersRes, ufRes, fieldsRes] = await Promise.all([
         participantClient
           .from('users')
-          .select('id,name,expert_organization,expert_position,expert_description')
+          .select(
+            'id,name,expert_organization,expert_position,expert_description,profile_image_url',
+          )
           .in('id', expertIds)
           .returns<ExpertUserRow[]>(),
         participantClient
@@ -121,8 +196,43 @@ export function useEventExperts(eventId: string) {
           description: u?.expert_description ?? null,
           defaultTableId: p.default_table_id,
           fieldNames: fieldsByUser.get(p.user_id) ?? [],
+          profileImageUrl: u?.profile_image_url ?? null,
         } satisfies PortalExpert;
       });
+    },
+  });
+}
+
+/**
+ * 전문가 프로필 사진의 단기 Signed URL 일괄 조회(avatars 버킷, participantClient).
+ * 반환은 전문가 userId → URL 맵. 사진 미등록 전문가는 누락(카드에서 이니셜 대체).
+ * 슬롯 폴링과 분리된 쿼리라 10초마다 재호출하지 않는다(URL 만료 전까지 캐시).
+ */
+export function useExpertAvatars(eventId: string, experts: PortalExpert[]) {
+  const withPhoto = experts
+    .map((e) => ({ id: e.userId, path: e.profileImageUrl }))
+    .filter((x): x is { id: string; path: string } => Boolean(x.path));
+  const cacheKey = withPhoto
+    .map((p) => `${p.id}:${p.path}`)
+    .sort()
+    .join('|');
+
+  return useQuery<Map<string, string>>({
+    queryKey: portalKeys.avatars(eventId, cacheKey),
+    enabled: withPhoto.length > 0,
+    staleTime: 50 * 60 * 1000,
+    queryFn: async () => {
+      const byPath = await createSignedUrlsWithClient(
+        participantClient,
+        withPhoto.map((p) => p.path),
+        60 * 60,
+      );
+      const map = new Map<string, string>();
+      for (const { id, path } of withPhoto) {
+        const url = byPath.get(path);
+        if (url) map.set(id, url);
+      }
+      return map;
     },
   });
 }

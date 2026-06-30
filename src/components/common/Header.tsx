@@ -1,12 +1,14 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
-import { displayName } from '@/lib/labels';
+import { Badge } from '@/components/common/Badge';
+import { Button } from '@/components/common/Button';
+import { displayName, ROLE_LABELS } from '@/lib/labels';
 
 /**
- * 상단 헤더 (page_auth_layout.md §2.3).
+ * 상단 헤더 (page_auth_layout.md §2.3 / 9-C).
  * - 왼쪽: 햄버거(모바일), 로고.
- * - 오른쪽: 사용자 호칭, 로그아웃.
+ * - 오른쪽: 역할 배지 + 사용자 호칭(위계), 로그아웃.
  * (행사 진행 중 카운트다운 배지는 Phase 6 전문가 대시보드에서 연결)
  */
 export function Header() {
@@ -20,8 +22,10 @@ export function Header() {
     navigate('/login', { replace: true });
   };
 
+  const isSuper = user?.role === 'ADMIN' && user.is_super_admin;
+
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-white px-4">
+    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-surface-raised px-4">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -31,22 +35,23 @@ export function Header() {
         >
           <HamburgerIcon />
         </button>
-        <span className="rounded-md bg-brand px-2 py-0.5 text-sm font-bold text-white">YNA 매칭</span>
+        <span className="text-base font-bold text-neutral-base">비즈니스 매칭</span>
       </div>
 
       <div className="flex items-center gap-3">
         {user && (
-          <span className="hidden max-w-[12rem] truncate text-sm font-semibold text-neutral-base sm:inline">
-            {displayName(user)}
-          </span>
+          <div className="hidden items-center gap-2 sm:flex">
+            <Badge tone={isSuper ? 'brand' : 'neutral'} size="11">
+              {isSuper ? '최고관리자' : ROLE_LABELS[user.role]}
+            </Badge>
+            <span className="max-w-[12rem] truncate text-sm font-semibold text-neutral-base">
+              {displayName(user)}
+            </span>
+          </div>
         )}
-        <button
-          type="button"
-          onClick={onLogout}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-neutral-base transition-colors hover:bg-surface"
-        >
+        <Button variant="outline" size="sm" onClick={onLogout}>
           로그아웃
-        </button>
+        </Button>
       </div>
     </header>
   );

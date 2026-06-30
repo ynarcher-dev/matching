@@ -13,6 +13,7 @@ import type { SurveyQuestion } from '@/types/satisfaction';
 function q(partial: Partial<SurveyQuestion> & Pick<SurveyQuestion, 'id' | 'order_no'>): SurveyQuestion {
   return {
     event_id: 'a0000000-0000-4000-8000-000000000001',
+    survey_scope: 'EVENT',
     target_role: 'STARTUP',
     question_type: 'RATING',
     title: '문항',

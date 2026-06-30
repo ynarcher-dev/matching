@@ -124,3 +124,31 @@ export function bookingBlockReason(
   }
   return null;
 }
+
+/**
+ * 슬롯 한 칸의 표시 상태(전문가별·시간대별 보기 공통).
+ *  - none    : 슬롯 없음(매트릭스 빈칸)
+ *  - mine    : 내가 예약한 슬롯
+ *  - taken   : 타 기업 점유 또는 취소(마감)
+ *  - blocked : 빈 슬롯이지만 예약 단계 아님/한도·중복·충돌로 신청 불가
+ *  - open    : 지금 신청 가능
+ */
+export type CellState = 'open' | 'blocked' | 'taken' | 'mine' | 'none';
+
+/** 슬롯의 표시 상태를 판정한다(예약 가능/내 예약/마감/신청 불가). */
+export function cellStateOf(
+  slot: MatchingSlotRow | undefined,
+  allSlots: MatchingSlotRow[],
+  myId: string,
+  maxSessions: number,
+  canBook: boolean,
+  allowDuplicateExpert: boolean,
+): CellState {
+  if (!slot) return 'none';
+  if (isMine(slot, myId)) return 'mine';
+  if (!isAvailable(slot)) return 'taken';
+  if (!canBook) return 'blocked';
+  return bookingBlockReason(allSlots, slot, myId, maxSessions, { allowDuplicateExpert })
+    ? 'blocked'
+    : 'open';
+}

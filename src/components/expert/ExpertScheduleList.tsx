@@ -1,5 +1,6 @@
 import { Card } from '@/components/common/Card';
 import { SessionStatusBadge } from '@/components/expert/SessionStatusBadge';
+import { Badge } from '@/components/common/Badge';
 import { formatDateTime } from '@/lib/datetime';
 import { attendanceStatusFor } from '@/lib/attendance';
 import type { AttendanceLogRow } from '@/types/attendance';
@@ -95,15 +96,14 @@ export function ExpertScheduleList({
 function AttendanceChip({ label, present }: { label: string; present: 'PRESENT' | 'ABSENT' | null }) {
   const tone =
     present === 'PRESENT'
-      ? 'bg-emerald-100 text-emerald-700'
+      ? 'success'
       : present === 'ABSENT'
-        ? 'bg-brand/10 text-brand'
-        : 'bg-muted text-neutral-base/50';
+        ? 'danger'
+        : 'muted';
   const mark = present === 'PRESENT' ? '✓' : present === 'ABSENT' ? '✕' : '–';
   return (
-    <span className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-semibold ${tone}`}>
-      {label}
-      {mark}
-    </span>
+    <Badge tone={tone} size="11">
+      {label} {mark}
+    </Badge>
   );
 }

@@ -142,11 +142,11 @@ export function AllocationSlotBoard({
 function Legend() {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface/50 px-3 py-2 text-xs text-neutral-base/70">
-      <LegendItem className="border-emerald-200 bg-emerald-50" label="기존 확정(수동/AI/강제)" />
-      <LegendItem className="border-violet-200 bg-violet-50" label="AI 제안" />
-      <LegendItem className="border-red-400 bg-white" label="충돌 우려" />
+      <LegendItem className="border-success-border bg-success-surface" label="기존 확정(수동/AI/강제)" />
+      <LegendItem className="border-ai-border bg-ai-surface" label="AI 제안" />
+      <LegendItem className="border-danger bg-surface-raised" label="충돌 우려" />
       <span className="inline-flex items-center gap-1">
-        <span className="text-amber-600">⚠</span> 분야 불일치(차선)
+        <span className="text-warning">⚠</span> 분야 불일치(차선)
       </span>
     </div>
   );

@@ -8,6 +8,7 @@ import type {
   SurveyQuestion,
   SurveyQuestionInput,
   SurveyQuestionType,
+  SurveyScope,
   SurveyTargetRole,
 } from '@/types/satisfaction';
 import type { EventStatus } from '@/types/event';
@@ -49,9 +50,13 @@ export function editLockReason(status: EventStatus, responseCount: number): stri
   return null;
 }
 
-/** 같은 역할(role) 문항들 뒤에 새로 붙일 order_no. */
-export function nextOrderNo(questions: SurveyQuestion[], role: SurveyTargetRole): number {
-  const same = questions.filter((q) => q.target_role === role);
+/** 같은 스코프·역할 문항들 뒤에 새로 붙일 order_no. order_no 는 (scope, role) 단위로 매긴다. */
+export function nextOrderNo(
+  questions: SurveyQuestion[],
+  role: SurveyTargetRole,
+  scope: SurveyScope = 'EVENT',
+): number {
+  const same = questions.filter((q) => q.target_role === role && q.survey_scope === scope);
   if (same.length === 0) return 1;
   return Math.max(...same.map((q) => q.order_no)) + 1;
 }
@@ -61,14 +66,28 @@ export function cleanOptions(options: string[]): string[] {
   return options.map((o) => o.trim()).filter((o) => o.length > 0);
 }
 
-/** 레거시 4점 + 자유의견 기본 템플릿(역할별). */
+/** 레거시 4점 + 자유의견 기본 템플릿(행사 만족도, 역할별). */
 export function defaultTemplate(role: SurveyTargetRole): SurveyQuestionInput[] {
-  const base: Omit<SurveyQuestionInput, 'target_role'>[] = [
+  const base: Omit<SurveyQuestionInput, 'target_role' | 'survey_scope'>[] = [
     { question_type: 'RATING', title: '행사 전반 만족도', description: '행사 전반에 대해 얼마나 만족하셨나요?', options: null, is_required: true, order_no: 1 },
     { question_type: 'RATING', title: '매칭 적절성', description: '연결된 상대와의 매칭이 적절했나요?', options: null, is_required: true, order_no: 2 },
     { question_type: 'RATING', title: '운영 만족도', description: '행사 운영(안내·진행)에 만족하셨나요?', options: null, is_required: true, order_no: 3 },
     { question_type: 'RATING', title: '재참여 의향', description: '다음에도 참여하실 의향이 있으신가요?', options: null, is_required: true, order_no: 4 },
     { question_type: 'LONG_ANSWER', title: '자유 의견', description: '행사 운영·매칭에 대한 의견을 자유롭게 남겨 주세요.', options: null, is_required: false, order_no: 5 },
   ];
-  return base.map((b) => ({ ...b, target_role: role }));
+  return base.map((b) => ({ ...b, survey_scope: 'EVENT', target_role: role }));
+}
+
+/**
+ * 전문가 만족도 기본 템플릿 (8-G). 스타트업이 상담 전문가별로 응답하므로 target_role='STARTUP'.
+ * DB 트리거(0048 ensure_default_expert_survey_questions)와 동일한 문항 구성.
+ */
+export function defaultExpertTemplate(): SurveyQuestionInput[] {
+  const base: Omit<SurveyQuestionInput, 'target_role' | 'survey_scope'>[] = [
+    { question_type: 'RATING', title: '전문가 전문성', description: '상담 전문가의 전문성에 만족하셨나요?', options: null, is_required: true, order_no: 1 },
+    { question_type: 'RATING', title: '상담 도움 정도', description: '상담 내용이 실질적으로 도움이 되었나요?', options: null, is_required: true, order_no: 2 },
+    { question_type: 'RATING', title: '재상담 의향', description: '이 전문가와 다시 상담하고 싶으신가요?', options: null, is_required: true, order_no: 3 },
+    { question_type: 'LONG_ANSWER', title: '전문가께 남길 의견', description: '상담 전문가에 대한 의견을 자유롭게 남겨 주세요.', options: null, is_required: false, order_no: 4 },
+  ];
+  return base.map((b) => ({ ...b, survey_scope: 'EXPERT', target_role: 'STARTUP' }));
 }

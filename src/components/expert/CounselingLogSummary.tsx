@@ -1,5 +1,6 @@
 import type { CounselingLogRow } from '@/types/expert';
 import type { CounselingAnswerRow, CounselingQuestion } from '@/types/counselingLog';
+import { Badge } from '@/components/common/Badge';
 
 /**
  * 상담일지 읽기 전용 요약 (이전 상담 이력 카드 본문).
@@ -63,17 +64,13 @@ export function CounselingLogSummary({
 
       <div className="flex flex-wrap gap-2 text-xs">
         {log.follow_up_required && (
-          <span className="rounded-full bg-brand/10 px-2 py-0.5 font-semibold text-brand">
+          <Badge tone="brand">
             후속 연계 요청
-          </span>
+          </Badge>
         )}
-        <span
-          className={`rounded-full px-2 py-0.5 font-semibold ${
-            log.is_public ? 'bg-emerald-100 text-emerald-700' : 'bg-muted text-neutral-base/60'
-          }`}
-        >
+        <Badge tone={log.is_public ? 'success' : 'muted'}>
           의견 {log.is_public ? '공개' : '비공개'}
-        </span>
+        </Badge>
       </div>
 
       {log.follow_up_required && log.follow_up_memo && (

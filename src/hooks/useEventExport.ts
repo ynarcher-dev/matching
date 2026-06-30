@@ -36,6 +36,7 @@ interface RawCounselingSlot {
   expert_id: string | null;
   startup_id: string | null;
   start_time: string;
+  end_time: string;
   session_status: string;
 }
 
@@ -110,7 +111,7 @@ async function fetchBundle(eventId: string, timezone: string): Promise<EventExpo
       .from('counseling_logs')
       .select(
         'id,submitted_at,follow_up_required,follow_up_memo,is_public,' +
-          'matching_slots!inner(id,event_id,expert_id,startup_id,start_time,session_status),' +
+          'matching_slots!inner(id,event_id,expert_id,startup_id,start_time,end_time,session_status),' +
           'counseling_log_answers(question_id,answer_text,answer_rating,answer_selections)',
       )
       .eq('matching_slots.event_id', eventId),
@@ -137,8 +138,18 @@ async function fetchBundle(eventId: string, timezone: string): Promise<EventExpo
         role: u.role,
         company_name: u.company_name,
         representative_name: u.representative_name,
+        contact_name: null,
+        company_homepage: null,
         expert_organization: u.expert_organization,
         expert_position: u.expert_position,
+        email: null,
+        phone_number: null,
+        company_description: null,
+        expert_description: null,
+        field_ids: [],
+        proposal_file_url: null, // 내보내기 이름 해석용 — IR 경로·연락처·분야 불필요
+        last_login_at: null,
+        created_at: '',
       },
     ]),
   );
@@ -155,6 +166,7 @@ async function fetchBundle(eventId: string, timezone: string): Promise<EventExpo
         expert_id: slot?.expert_id ?? null,
         startup_id: slot?.startup_id ?? null,
         start_time: slot?.start_time ?? '',
+        end_time: slot?.end_time ?? '',
         session_status: slot?.session_status ?? '',
         answers: r.counseling_log_answers ?? [],
       } satisfies ReportCounselingLog;

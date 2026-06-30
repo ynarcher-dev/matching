@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   alreadyBookedExpert,
   bookingBlockReason,
+  cellStateOf,
   conflictsWithMine,
   isAvailable,
   isMine,
@@ -151,5 +152,40 @@ describe('bookingBlockReason', () => {
     expect(
       bookingBlockReason([mine, target], target, ME, 3, { allowDuplicateExpert: true }),
     ).toContain('같은 시간대');
+  });
+});
+
+describe('cellStateOf', () => {
+  it('슬롯 없으면 none', () => {
+    expect(cellStateOf(undefined, [], ME, 3, true, false)).toBe('none');
+  });
+  it('내 예약은 mine(예약 단계 아니어도 우선)', () => {
+    const s = slot({ id: 's', startup_id: ME });
+    expect(cellStateOf(s, [s], ME, 3, false, false)).toBe('mine');
+  });
+  it('타 기업 점유는 taken', () => {
+    const s = slot({ id: 's', startup_id: 'other' });
+    expect(cellStateOf(s, [s], ME, 3, true, false)).toBe('taken');
+  });
+  it('빈 슬롯이라도 예약 단계 아니면 blocked', () => {
+    const s = slot({ id: 's' });
+    expect(cellStateOf(s, [s], ME, 3, false, false)).toBe('blocked');
+  });
+  it('예약 가능하면 open', () => {
+    const s = slot({ id: 's' });
+    expect(cellStateOf(s, [s], ME, 3, true, false)).toBe('open');
+  });
+  it('동일 전문가 기존 예약이 있으면 blocked(중복 차단)', () => {
+    const mine = slot({
+      id: 'a',
+      startup_id: ME,
+      expert_id: 'X1',
+      start_time: '2026-07-10T20:00:00.000Z',
+      end_time: '2026-07-10T20:40:00.000Z',
+    });
+    const target = slot({ id: 't', expert_id: 'X1' });
+    expect(cellStateOf(target, [mine, target], ME, 3, true, false)).toBe('blocked');
+    // allowDuplicateExpert ON 이면 같은 자리 신청 가능
+    expect(cellStateOf(target, [mine, target], ME, 3, true, true)).toBe('open');
   });
 });

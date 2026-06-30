@@ -70,7 +70,10 @@ erDiagram
 - `contact_name` (VARCHAR(100), Nullable): 스타트업 담당자명.
 - `company_description` (TEXT, Nullable): 스타트업 한줄 소개/요약.
 - `company_homepage` (VARCHAR(255), Nullable): 스타트업 홈페이지.
-- `proposal_file_url` (VARCHAR(512), Nullable): 스타트업 사업소개서 PDF 스토리지 링크.
+- `proposal_file_url` (VARCHAR(512), Nullable): 스타트업 사업소개서 PDF 스토리지 링크(최신본). 업로드마다 고유 경로(`proposals/{id}/{uuid}.pdf`)에 저장되며 과거본은 보존됩니다(변경 이력은 `proposal_uploads`).
+- `proposal_uploaded_at` (TIMESTAMPTZ, Nullable): 소개서 마지막 업로드 시각(트리거 자동 기록).
+- `proposal_uploaded_by` (UUID, Nullable, FK→users.id): 소개서 마지막 업로드 주체(관리자 대행 또는 본인).
+- `last_login_at` (TIMESTAMPTZ, Nullable): 무료 운영 로그인/긴급 링크 소비 시각.
 - `profile_image_url` (VARCHAR(512), Nullable): 전문가 프로필 사진 스토리지 링크.
 - `expert_organization` (VARCHAR(255), Nullable): 전문가 소속 기관.
 - `expert_position` (VARCHAR(100), Nullable): 전문가 직책.
@@ -89,6 +92,19 @@ erDiagram
 - `user_id` (UUID, FK): `users.id` 참조.
 - `field_id` (UUID, FK): `fields.id` 참조.
 - PRIMARY KEY `(user_id, field_id)`.
+
+### 2.4-b proposal_uploads (스타트업 소개서 업로드 이력 테이블)
+스타트업 사업소개서의 변경 이력을 한 건씩 기록하는 타임라인 테이블입니다(0052). 업로드/교체/해제마다 한 행이 쌓이며, 과거 버전 PDF 는 삭제되지 않아 `file_path` 로 열람할 수 있습니다.
+- `id` (UUID, PK)
+- `user_id` (UUID, FK→users.id, ON DELETE CASCADE): 대상 스타트업.
+- `action` (TEXT): `UPLOAD`(최초) | `REPLACE`(교체) | `CLEAR`(해제).
+- `file_path` (TEXT, Nullable): 이 이력이 가리키는 Storage 객체 경로. `CLEAR`이면 NULL.
+- `file_name` (TEXT, Nullable): 업로드한 원본 파일명. 백필/확인 불가 시 NULL.
+- `file_size` (BIGINT, Nullable): 파일 크기(바이트).
+- `uploaded_by` (UUID, Nullable, FK→users.id): 업로드 주체(관리자 대행 또는 본인). 트리거가 서버에서 기록.
+- `uploaded_at` (TIMESTAMPTZ): 업로드 시각.
+- INDEX `(user_id, uploaded_at DESC)`.
+- RLS: 읽기 = 관리자/스태프 + 본인, 쓰기 = 관리자 직접 INSERT / 자가 업로드는 `set_my_proposal_file` RPC.
 
 ### 2.5 event_participant_fields (행사별 참가 분야 관계 테이블)
 특정 행사에서 적용할 참가자의 관심/전문 분야입니다. 값이 없으면 `user_fields`를 상속합니다.

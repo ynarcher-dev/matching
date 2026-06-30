@@ -79,6 +79,7 @@ export function useGrantEventOperator() {
     mutationFn: (args) => invokeOperatorFn('event-operator-grant', args),
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: ['event-operators', vars.user_id] });
+      void qc.invalidateQueries({ queryKey: ['event-operators-by-event', vars.event_id] });
       void qc.invalidateQueries({ queryKey: ['operators'] });
     },
   });
@@ -96,6 +97,7 @@ export function useRevokeEventOperator() {
     mutationFn: (args) => invokeOperatorFn('event-operator-revoke', args),
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: ['event-operators', vars.user_id] });
+      void qc.invalidateQueries({ queryKey: ['event-operators-by-event', vars.event_id] });
       void qc.invalidateQueries({ queryKey: ['operators'] });
     },
   });

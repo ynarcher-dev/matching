@@ -1,22 +1,25 @@
 import { useMemo, useState } from 'react';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
-import { TextField } from '@/components/common/TextField';
+import { Badge } from '@/components/common/Badge';
+import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
+import { PageToolbar } from '@/components/common/PageToolbar';
+import { SearchInput } from '@/components/common/FilterBar';
+import { Pagination } from '@/components/common/Pagination';
+import { RowActionGroup } from '@/components/common/RowActionGroup';
 import { CompanyPhotoUploadPanel } from '@/components/staff/CompanyPhotoUploadPanel';
+import { useDataTable } from '@/hooks/useDataTable';
 import { useEventCompanyPhotos } from '@/hooks/useCompanyPhotos';
-import {
-  buildCompanyStatuses,
-  filterCompanyStatuses,
-  summarizePhotoStatus,
-} from '@/lib/companyPhoto';
+import { buildCompanyStatuses, summarizePhotoStatus } from '@/lib/companyPhoto';
+import type { SortValue } from '@/lib/dataTable';
 import { formatDateTime } from '@/lib/datetime';
 import type { AssignableUser, EventParticipantRow } from '@/types/eventDetail';
-import type { PhotoCompany } from '@/types/companyPhoto';
+import type { CompanyPhotoStatus, PhotoCompany } from '@/types/companyPhoto';
 
 /**
- * 관리자 행사 상세 "사진 현황" 탭 (docs/staff_company_photo_upload.md §6).
- * 기업별 등록 현황(개수·마지막 업로드)·누락 기업·전체 요약을 제공하고,
- * 기업을 펼치면 사진 검수(조회/삭제)와 보완 업로드까지 할 수 있다(관리자도 is_admin_or_staff).
+ * 관리자 행사 상세 "사진 현황" 탭 (docs/staff_company_photo_upload.md §6 / 9-D).
+ * 기업별 등록 현황(개수·마지막 업로드)·누락 기업·전체 요약을 8-C 공통 DataTable 로 제공하고,
+ * 기업을 펼치면(검수) 사진 검수(조회/삭제)와 보완 업로드까지 할 수 있다(관리자도 is_admin_or_staff).
  */
 export function PhotoStatusPanel({
   eventId,
@@ -30,7 +33,6 @@ export function PhotoStatusPanel({
   timezone: string;
 }) {
   const photosQ = useEventCompanyPhotos(eventId);
-  const [query, setQuery] = useState('');
   const [openCompany, setOpenCompany] = useState<string | null>(null);
 
   const companies = useMemo<PhotoCompany[]>(
@@ -53,13 +55,82 @@ export function PhotoStatusPanel({
     [companies, photosQ.data],
   );
   const summary = useMemo(() => summarizePhotoStatus(statuses), [statuses]);
-  const filtered = useMemo(() => filterCompanyStatuses(statuses, query), [statuses, query]);
 
+  const sortValues = useMemo<Record<string, (s: CompanyPhotoStatus) => SortValue>>(
+    () => ({
+      company: (s) => s.companyName,
+      count: (s) => s.photoCount,
+      last: (s) => s.lastUploadedAt,
+    }),
+    [],
+  );
+
+  const table = useDataTable(statuses, {
+    getSearchText: (s) => [s.companyName, s.contactName].filter(Boolean).join(' '),
+    sortValues,
+    initialSort: { key: 'company', direction: 'asc' },
+  });
+
+  const columns = useMemo<DataTableColumn<CompanyPhotoStatus>[]>(
+    () => [
+      {
+        key: 'company',
+        header: '기업명',
+        sortable: true,
+        cell: (s) => <span className="font-medium text-neutral-base">{s.companyName}</span>,
+      },
+      {
+        key: 'contact',
+        header: '담당자',
+        cell: (s) => <span className="text-neutral-base/80">{s.contactName}</span>,
+      },
+      {
+        key: 'count',
+        header: '사진 수',
+        sortable: true,
+        cell: (s) =>
+          s.photoCount > 0 ? (
+            <span className="font-semibold text-success">{s.photoCount}</span>
+          ) : (
+            <Badge tone="warning">미등록</Badge>
+          ),
+      },
+      {
+        key: 'last',
+        header: '마지막 업로드',
+        sortable: true,
+        cell: (s) => (
+          <span className="text-neutral-base/80">
+            {s.lastUploadedAt ? formatDateTime(s.lastUploadedAt, timezone) : '-'}
+          </span>
+        ),
+      },
+      {
+        key: 'actions',
+        header: '',
+        align: 'right',
+        cell: (s) => (
+          <RowActionGroup
+            actions={[
+              {
+                key: 'inspect',
+                label: openCompany === s.userId ? '닫기' : '검수',
+                tone: 'brand',
+                onClick: () => setOpenCompany((cur) => (cur === s.userId ? null : s.userId)),
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [openCompany, timezone],
+  );
+
+  const openCompanyInfo = companies.find((c) => c.userId === openCompany) ?? null;
   const openPhotos = useMemo(
     () => (photosQ.data ?? []).filter((p) => p.company_user_id === openCompany),
     [photosQ.data, openCompany],
   );
-  const openCompanyInfo = companies.find((c) => c.userId === openCompany) ?? null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -75,64 +146,33 @@ export function PhotoStatusPanel({
         <Alert tone="error">사진 현황을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
       )}
 
-      <Card className="p-4">
-        <div className="mb-3 max-w-xs">
-          <TextField
-            label="기업 검색"
+      <PageToolbar
+        search={
+          <SearchInput
+            value={table.search}
+            onChange={table.setSearch}
             placeholder="기업명 또는 담당자명"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
           />
-        </div>
-        {filtered.length === 0 ? (
-          <p className="py-6 text-center text-sm text-neutral-base">
-            {statuses.length === 0 ? '참가 기업이 없습니다.' : '검색 결과가 없습니다.'}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-neutral-base/70">
-                  <th className="px-2 py-2 font-semibold">기업명</th>
-                  <th className="px-2 py-2 font-semibold">담당자</th>
-                  <th className="px-2 py-2 font-semibold">사진 수</th>
-                  <th className="px-2 py-2 font-semibold">마지막 업로드</th>
-                  <th className="px-2 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((s) => (
-                  <tr key={s.userId} className="border-b border-border/60">
-                    <td className="px-2 py-2 font-medium text-neutral-base">{s.companyName}</td>
-                    <td className="px-2 py-2 text-neutral-base/80">{s.contactName}</td>
-                    <td className="px-2 py-2">
-                      {s.photoCount > 0 ? (
-                        <span className="font-semibold text-emerald-700">{s.photoCount}</span>
-                      ) : (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                          미등록
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 py-2 text-neutral-base/80">
-                      {s.lastUploadedAt ? formatDateTime(s.lastUploadedAt, timezone) : '-'}
-                    </td>
-                    <td className="px-2 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setOpenCompany((cur) => (cur === s.userId ? null : s.userId))}
-                        className="font-semibold text-brand underline hover:text-brand-hover"
-                      >
-                        {openCompany === s.userId ? '닫기' : '검수'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+        }
+      />
+
+      <DataTable
+        columns={columns}
+        rows={table.rows}
+        rowKey={(s) => s.userId}
+        sort={table.sort}
+        onSort={table.toggleSort}
+        loading={photosQ.isLoading}
+        emptyMessage={statuses.length === 0 ? '참가 기업이 없습니다.' : '검색 결과가 없습니다.'}
+      />
+
+      <Pagination
+        page={table.page}
+        totalPages={table.totalPages}
+        pageSize={table.pageSize}
+        total={table.totalFiltered}
+        onPageChange={table.setPage}
+      />
 
       {openCompanyInfo && (
         <Card className="p-4">
@@ -157,7 +197,7 @@ function SummaryCard({
   tone?: 'ok' | 'warn';
 }) {
   const valueClass =
-    tone === 'ok' ? 'text-emerald-700' : tone === 'warn' ? 'text-amber-700' : 'text-neutral-base';
+    tone === 'ok' ? 'text-success' : tone === 'warn' ? 'text-warning' : 'text-neutral-base';
   return (
     <Card className="p-3">
       <p className="text-xs text-neutral-base/70">{label}</p>

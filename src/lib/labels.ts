@@ -1,9 +1,10 @@
 import type { AppRole, AppUser } from '@/types/auth';
-import type { EventStatus } from '@/types/event';
+import type { EventStatus, SatisfactionPolicy } from '@/types/event';
 import type { AssignableUser, BookingType, SessionStatus } from '@/types/eventDetail';
 import type { NotificationStatus } from '@/types/notification';
-import type { AuthChannel, OtpChannel, OtpStatus, ParticipantRole } from '@/types/user';
+import type { AuthChannel, ParticipantRole } from '@/types/user';
 import type { OperatorPermission, OperatorRole } from '@/types/operator';
+import { BADGE_TONE, type Tone } from '@/lib/tone';
 
 /**
  * DB 영문 enum → 한국어 라벨 단일 매핑 (dev_conventions.md 2장).
@@ -24,6 +25,14 @@ export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   PROGRESS: '진행',
   FINISHED: '종료',
   CANCELLED: '취소',
+};
+
+/** 행사별 만족도 수집 정책 한국어 라벨 (8-D, functional_followup_plan.md T6). */
+export const SATISFACTION_POLICY_LABELS: Record<SatisfactionPolicy, string> = {
+  EVENT_ONLY: '행사 전체 만족도만',
+  EXPERT_ONLY: '상담 전문가별 만족도만',
+  BOTH: '둘 다 수집',
+  NONE: '수집 안 함',
 };
 
 /** 참가자 역할 한국어 라벨(역할 탭·테이블). */
@@ -50,7 +59,7 @@ export const OPERATOR_PERMISSION_LABELS: Record<OperatorPermission, string> = {
 export const BOOKING_TYPE_LABELS: Record<BookingType, string> = {
   NONE: '미예약',
   MANUAL: '수동',
-  AUTO_AI: 'AI',
+  AUTO_AI: 'AI배치',
   ADMIN_FORCE: '강제',
 };
 
@@ -63,8 +72,21 @@ export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
   CANCELLED: '취소',
 };
 
+/**
+ * 세션 진행 상태별 의미 tone (대기/진행/완료/노쇼/취소).
+ * 범례·셀 배지·진행 버튼이 모두 이 맵을 경유해 같은 상태 = 같은 색이 되도록 한다.
+ * 읽기용은 BADGE_TONE, 선택(활성)은 SOLID_TONE 를 같은 tone 으로 조회한다.
+ */
+export const SESSION_STATUS_TONE: Record<SessionStatus, Tone> = {
+  WAITING: 'neutral',
+  IN_PROGRESS: 'info',
+  COMPLETED: 'success',
+  NO_SHOW: 'danger',
+  CANCELLED: 'muted',
+};
+
 /** 인증/발송 채널 한국어 라벨. */
-export const CHANNEL_LABELS: Record<OtpChannel | AuthChannel, string> = {
+export const CHANNEL_LABELS: Record<AuthChannel | 'ALIMTALK', string> = {
   EMAIL: '이메일',
   SMS: '문자',
   ALIMTALK: '알림톡',
@@ -110,19 +132,10 @@ export const DISPATCH_MODE_LABELS: Record<
   string,
   { label: string; className: string }
 > = {
-  FREE_OPERATION: { label: '무료 운영', className: 'bg-surface text-neutral-base/70 border-border' },
-  MOCK:           { label: 'Mock 발송', className: 'bg-amber-50 text-amber-700 border-amber-300' },
-  LIVE:           { label: '실발송 가능', className: 'bg-emerald-50 text-emerald-700 border-emerald-300' },
-  INCOMPLETE:     { label: '설정 불완전', className: 'bg-danger-surface text-brand border-brand' },
-};
-
-/** 최근 OTP 발송 상태 한국어 라벨 (admin_participant_auth_overview). */
-export const OTP_STATUS_LABELS: Record<OtpStatus, string> = {
-  SENT: '발송됨',
-  USED: '인증 완료',
-  EXPIRED: '만료',
-  INVALIDATED: '무효화',
-  NONE: '이력 없음',
+  FREE_OPERATION: { label: '무료 운영', className: BADGE_TONE.muted },
+  MOCK:           { label: 'Mock 발송', className: BADGE_TONE.warning },
+  LIVE:           { label: '실발송 가능', className: BADGE_TONE.success },
+  INCOMPLETE:     { label: '설정 불완전', className: BADGE_TONE.danger },
 };
 
 /**
