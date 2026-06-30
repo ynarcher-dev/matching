@@ -3,14 +3,18 @@ import { Badge } from '@/components/common/Badge';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
+import { Modal } from '@/components/common/Modal';
+import { Toggle } from '@/components/common/Toggle';
 import { StatBox } from '@/components/common/StatBox';
 import { TimeGridSheet } from '@/components/admin/TimeGridSheet';
+import { CompanyPhotoUploadPanel } from '@/components/staff/CompanyPhotoUploadPanel';
 import { useEventSlots } from '@/hooks/useEventDetail';
 import {
   DASHBOARD_POLL_MS,
   useMarkNoShow,
   useSetSessionStatus,
 } from '@/hooks/useEventDashboard';
+import { useEventCompanyPhotos } from '@/hooks/useCompanyPhotos';
 import { computeProgressStats } from '@/lib/booking';
 import { participantLabel, SESSION_STATUS_TONE } from '@/lib/labels';
 import { BADGE_TONE } from '@/lib/tone';
@@ -20,6 +24,7 @@ import type {
   EventTable,
   MatchingSlotRow,
 } from '@/types/eventDetail';
+import type { CompanyPhotoRow, PhotoCompany } from '@/types/companyPhoto';
 
 interface ProgressDashboardPanelProps {
   eventId: string;
@@ -50,6 +55,36 @@ export function ProgressDashboardPanel({
   const noShow = useMarkNoShow(eventId);
   const setSessionStatus = useSetSessionStatus(eventId);
   const [noShowTarget, setNoShowTarget] = useState<MatchingSlotRow | null>(null);
+
+  // 증빙사진 통합(ideation §3): 진행 현황판에서 셀별로 바로 업로드/검수한다.
+  // 사진은 (행사 × 스타트업 company_user_id) 단위 — 한 스타트업의 모든 셀이 같은 사진 묶음을 공유한다.
+  const photosQ = useEventCompanyPhotos(eventId);
+  const photosByStartup = useMemo(() => {
+    const m = new Map<string, CompanyPhotoRow[]>();
+    for (const p of photosQ.data ?? []) {
+      const arr = m.get(p.company_user_id);
+      if (arr) arr.push(p);
+      else m.set(p.company_user_id, [p]);
+    }
+    return m;
+  }, [photosQ.data]);
+  const photoCountByStartup = useMemo(() => {
+    const m = new Map<string, number>();
+    photosByStartup.forEach((arr, k) => m.set(k, arr.length));
+    return m;
+  }, [photosByStartup]);
+
+  const [photoFilter, setPhotoFilter] = useState(false);
+  const [photoTarget, setPhotoTarget] = useState<string | null>(null);
+  const photoCompany = useMemo<PhotoCompany | null>(() => {
+    if (!photoTarget) return null;
+    const u = userById.get(photoTarget);
+    return {
+      userId: photoTarget,
+      companyName: u?.company_name || u?.name || '(이름 미상)',
+      contactName: u?.representative_name || u?.name || '',
+    };
+  }, [photoTarget, userById]);
 
   const pending = noShow.isPending || setSessionStatus.isPending;
   const actionError = setSessionStatus.isError
@@ -94,8 +129,16 @@ export function ProgressDashboardPanel({
           <Legend className={BADGE_TONE[SESSION_STATUS_TONE.COMPLETED]} label="완료" />
           <Legend className={BADGE_TONE[SESSION_STATUS_TONE.NO_SHOW]} label="노쇼" />
           <span className="ml-1 text-neutral-base/50">
-            · 셀 색은 진행 상태입니다. 각 셀에서 대기중/진행중/완료를 직접 전환하면 출석이 자동 처리되고(진행·완료=출석, 노쇼=불참), 노쇼는 사유 버튼으로, 전문가 상담일지는 별도로 제출됩니다.
+            · 셀 색은 진행 상태입니다. 각 셀에서 대기중/진행중/완료를 직접 전환하면 출석이 자동 처리되고(진행·완료=출석, 노쇼=불참), 노쇼는 사유 버튼으로, 전문가 상담일지는 별도로 제출됩니다. 셀 하단 📷 버튼으로 증빙사진을 바로 등록·검수합니다.
           </span>
+          <label className="ml-auto inline-flex items-center gap-2 text-neutral-base/70">
+            <Toggle
+              checked={photoFilter}
+              onChange={setPhotoFilter}
+              label="사진 미등록 셀만 보기"
+            />
+            <span className="font-semibold">📷 사진 미등록 셀만 보기</span>
+          </label>
         </div>
 
         {slotsQ.isError && (
@@ -111,10 +154,13 @@ export function ProgressDashboardPanel({
           timezone={timezone}
           locked={locked}
           pending={pending}
+          photoCountByStartup={photoCountByStartup}
+          photoFilter={photoFilter}
           onMarkNoShow={setNoShowTarget}
           onSetSessionStatus={(slot, status) =>
             setSessionStatus.mutate({ slotId: slot.id, status })
           }
+          onOpenPhotos={(slot) => slot.startup_id && setPhotoTarget(slot.startup_id)}
         />
       </Card>
 
@@ -141,6 +187,22 @@ export function ProgressDashboardPanel({
           }
         }}
       />
+
+      {/* 증빙사진 등록/검수 모달(ideation §3) — 셀에서 바로 열어 CompanyPhotoUploadPanel 재사용. */}
+      <Modal
+        open={photoCompany !== null}
+        onClose={() => setPhotoTarget(null)}
+        title="증빙사진"
+        size="md"
+      >
+        {photoCompany && (
+          <CompanyPhotoUploadPanel
+            eventId={eventId}
+            company={photoCompany}
+            photos={photosByStartup.get(photoCompany.userId) ?? []}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

@@ -28,6 +28,12 @@ interface TimeGridSheetProps {
   onMarkNoShow: (slot: MatchingSlotRow) => void;
   /** 진행 상태 직접 설정(대기중/진행중/완료, 관리/스태프). 출석은 상태 전환에 따라 자동 동기화된다. */
   onSetSessionStatus: (slot: MatchingSlotRow, status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED') => void;
+  /** 스타트업(company_user_id)별 등록된 증빙사진 수 — 셀 📷 배지/필터 (ideation §3). */
+  photoCountByStartup: Map<string, number>;
+  /** "사진 미등록 셀만 보기" — 켜면 사진 있는 셀을 흐리게, 미등록 셀을 강조한다. */
+  photoFilter: boolean;
+  /** 셀 📷 버튼 클릭 → 해당 스타트업 증빙사진 업로드/검수 모달 오픈. */
+  onOpenPhotos: (slot: MatchingSlotRow) => void;
 }
 
 /**
@@ -77,6 +83,9 @@ export function TimeGridSheet({
   pending,
   onMarkNoShow,
   onSetSessionStatus,
+  photoCountByStartup,
+  photoFilter,
+  onOpenPhotos,
 }: TimeGridSheetProps) {
   const { columns, byExpert } = useMemo(() => buildBookingSchedule(slots), [slots]);
 
@@ -181,8 +190,11 @@ export function TimeGridSheet({
                         userById={userById}
                         locked={locked}
                         pending={pending}
+                        photoCount={slot?.startup_id ? (photoCountByStartup.get(slot.startup_id) ?? 0) : 0}
+                        photoFilter={photoFilter}
                         onMarkNoShow={onMarkNoShow}
                         onSetSessionStatus={onSetSessionStatus}
+                        onOpenPhotos={onOpenPhotos}
                       />
                     </td>
                   );
@@ -196,34 +208,56 @@ export function TimeGridSheet({
   );
 }
 
-/** 한 칸: 진행 상태 배지 + 기업명/대표자명 + 진행 액션(대기/진행/완료/노쇼). 출석은 상태가 자동 처리. */
+/** 한 칸: 진행 상태 배지 + 기업명/대표자명 + 진행 액션(대기/진행/완료/노쇼) + 증빙사진. 출석은 상태가 자동 처리. */
 function GridCell({
   slot,
   userById,
   locked,
   pending,
+  photoCount,
+  photoFilter,
   onMarkNoShow,
   onSetSessionStatus,
+  onOpenPhotos,
 }: {
   slot: MatchingSlotRow | undefined;
   userById: Map<string, AssignableUser>;
   locked: boolean;
   pending: boolean;
+  photoCount: number;
+  photoFilter: boolean;
   onMarkNoShow: (slot: MatchingSlotRow) => void;
   onSetSessionStatus: (slot: MatchingSlotRow, status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED') => void;
+  onOpenPhotos: (slot: MatchingSlotRow) => void;
 }) {
-  if (!slot) return <span className="block text-center text-neutral-base/15">·</span>;
+  // 사진 필터 켜짐: 사진과 무관한 칸(빈 칸/빈 슬롯)은 흐리게 처리해 미등록 셀을 부각한다.
+  if (!slot) {
+    return (
+      <span className={`block text-center text-neutral-base/15 ${photoFilter ? 'opacity-25' : ''}`}>·</span>
+    );
+  }
   if (!slot.startup_id) {
-    return <span className="block py-2 text-center text-xs text-neutral-base/35">빈 슬롯</span>;
+    return (
+      <span className={`block py-2 text-center text-xs text-neutral-base/35 ${photoFilter ? 'opacity-25' : ''}`}>
+        빈 슬롯
+      </span>
+    );
   }
 
   const startup = userById.get(slot.startup_id);
   const status = slot.session_status;
   // 노쇼는 대기/진행 상태에서만 설정 가능(mark_no_show 가드). 그 외는 대기/진행/완료로 되돌려서.
   const noShowSettable = status === 'WAITING' || status === 'IN_PROGRESS';
+  // 사진 필터(ideation §3): 미등록 셀은 ring 강조, 등록 완료 셀은 흐리게.
+  const needsPhoto = photoFilter && photoCount === 0;
+  const dimmed = photoFilter && photoCount > 0;
 
   return (
-    <div className={`flex flex-col gap-1 rounded-md px-1 py-1.5 ${SESSION_CELL_TINT[slot.session_status]}`}>
+    <div
+      className={`flex flex-col gap-1 rounded-md px-1 py-1.5 transition-opacity ${SESSION_CELL_TINT[slot.session_status]} ${
+        dimmed ? 'opacity-25' : ''
+      } ${needsPhoto ? 'ring-2 ring-warning' : ''}`}
+    >
       <div className="flex justify-center">
         <span
           className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold ${STATUS_TONE[slot.session_status]}`}
@@ -276,7 +310,45 @@ function GridCell({
           onClick={() => onMarkNoShow(slot)}
         />
       </div>
+
+      {/* 증빙사진 통합(ideation §3): 셀에서 바로 업로드/검수 모달을 연다. 사진은 (행사×스타트업) 단위. */}
+      <PhotoCellButton count={photoCount} onClick={() => onOpenPhotos(slot)} />
     </div>
+  );
+}
+
+/** 셀 하단 증빙사진 버튼 — 등록 수 배지(있음=success, 없음=점선). 클릭 시 사진 모달. */
+function PhotoCellButton({ count, onClick }: { count: number; onClick: () => void }) {
+  const has = count > 0;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={has ? `증빙사진 ${count}장 보기` : '증빙사진 등록'}
+      className={`flex items-center justify-center gap-1 rounded-md border px-1 py-1 text-[10px] font-bold transition-colors ${
+        has
+          ? 'border-success-border bg-success-surface text-success hover:brightness-95'
+          : 'border-dashed border-border bg-surface-raised text-neutral-base/55 hover:bg-surface'
+      }`}
+    >
+      <CameraIcon />
+      <span>{has ? `${count}장` : '사진 등록'}</span>
+    </button>
+  );
+}
+
+/** 미니 카메라 아이콘(12px). */
+function CameraIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M3 6.5h2.2l1-1.6h5.6l1 1.6H17a1 1 0 0 1 1 1V15a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5a1 1 0 0 1 1-1Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <circle cx="10" cy="11" r="2.4" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
   );
 }
 
