@@ -18,6 +18,8 @@ export interface EventTable {
   table_code: string;
   description: string | null;
   is_active: boolean;
+  /** 테이블 현장 담당자(행사 배정 오퍼레이터 user_id). 담당 전문가와 별개. null=미지정. */
+  manager_user_id: string | null;
 }
 
 /** event_participants 한 행 (db_schema §2.6). */

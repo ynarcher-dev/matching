@@ -179,6 +179,25 @@ export function useSetTableExpert(eventId: string) {
 }
 
 /**
+ * 테이블 현장 담당자 지정/해제 — set_table_manager RPC(can_manage_event 가드, 0064).
+ * 담당 전문가(useSetTableExpert, 상담 진행자)와 별개로, 그 테이블을 현장에서 관리하는
+ * 오퍼레이터(행사 배정 STAFF+)를 지정한다. userId=null 이면 해제.
+ */
+export function useSetTableManager(eventId: string) {
+  const invalidate = useDetailInvalidation(eventId);
+  return useMutation({
+    mutationFn: async ({ tableId, userId }: { tableId: string; userId: string | null }) => {
+      const { error } = await supabase.rpc('set_table_manager', {
+        p_table_id: tableId,
+        p_user_id: userId,
+      });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/**
  * 행사장 테이블 등록/편집 — event_tables INSERT/UPDATE(ADMIN RLS).
  * 저장된 테이블 id 를 반환한다(생성 직후 담당 전문가 배정에 사용).
  */

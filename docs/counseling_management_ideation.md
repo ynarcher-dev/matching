@@ -20,9 +20,15 @@
   - UI: `TimeGridSheet` 노쇼 셀에 "현장 대체 매칭" 버튼 → `ReplaceNoShowModal`(동시간 예약 있는 스타트업은 비활성, 사유 필수). 권한은 `can_staff_event`(현장 스태프+).
   - 부수 수정: `0062` 가 `mark_no_show` 권한을 `can_staff_event`(0043)에서 ADMIN 전용으로 좁힌 회귀를 `0063` 에서 복구.
 
+- **§5 테이블 현장 담당자 배정: 구현 완료(ideation 후속, 그리드 1열 통합형).**
+  - 마이그레이션 `0064_table_manager.sql`: `event_tables` 에 `manager_user_id`(→`users`, ON DELETE SET NULL) 추가 + 신규 RPC `set_table_manager(p_table_id, p_user_id)`(해제는 `p_user_id=NULL`). 권한은 `can_manage_event`(OWNER/MANAGER, '담당 전문가' 지정과 같은 관리 레벨)이고, 담당자가 그 행사에 STAFF+ 로 배정된(revoked 아님) 오퍼레이터인지 검증한 뒤 `audit_logs`(`SET_TABLE_MANAGER`)에 변경을 남긴다.
+  - **'담당 전문가'(상담 진행자, `event_participants.default_table_id`)와 별개 개념**이다. 담당자는 그 테이블을 현장에서 관리(사진·노쇼 대응 등)하는 사람이고, 풀은 **행사 배정 오퍼레이터**다.
+  - UI: 진행 타임그리드(`TimeGridSheet`) 1열(테이블·전문가) 하단에 `현장 담당자` 셀렉트를 두었다(오퍼레이터 풀 + 미지정). `canManage` 면 편집, 아니면 읽기전용 칩, 전문가에 기본 테이블이 없는 행은 "테이블 미지정"으로 배정 불가. `ProgressDashboardPanel` 이 `useEventOperators` 로 후보를 로드하고 `useSetTableManager` 로 지정한다.
+  - **NOTE(A안)**: `useEventOperators` 의 `event_operator_roles` SELECT 가 현재 최고관리자 RLS 기준이라 일반 MANAGER 는 후보 목록이 비어 보일 수 있다. 우선 최고관리자/OWNER 시나리오로 두고, 필요 시 별도 마이그레이션에서 SELECT RLS 를 `can_manage_event` 까지 확장한다.
+
 ### 후속 결정 메모
 
-- (없음 — §1·§2·§3 구현 완료)
+- (없음 — §1·§2·§3·§5 구현 완료)
 
 ---
 

@@ -304,6 +304,7 @@ export function EventDetailView() {
           userById={userById}
           timezone={event.timezone}
           locked={locked}
+          canManage={canManage}
         />
       )}
 

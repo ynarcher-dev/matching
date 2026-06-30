@@ -36,6 +36,22 @@ interface TimeGridSheetProps {
   photoFilter: boolean;
   /** 셀 📷 버튼 클릭 → 해당 스타트업 증빙사진 업로드/검수 모달 오픈. */
   onOpenPhotos: (slot: MatchingSlotRow) => void;
+  /** 테이블 담당자 후보 = 행사 배정 오퍼레이터(STAFF+). 1열 하단 담당자 셀렉트에 나열. */
+  operators: TableManagerOption[];
+  /** table_id → 현재 담당자 user_id(없으면 null). 1열 담당자 표시/셀렉트 값. */
+  managerByTable: Map<string, string | null>;
+  /** 담당자 지정/해제(can_manage_event). userId=null 이면 해제. */
+  onSetTableManager: (tableId: string, userId: string | null) => void;
+  /** 담당자 지정 권한(OWNER/MANAGER). false 면 1열에 읽기전용 칩만 표시. */
+  canManage: boolean;
+  /** 담당자 mutation 진행 중 — 셀렉트 비활성. */
+  managerPending: boolean;
+}
+
+/** 1열 담당자 셀렉트 옵션(행사 배정 오퍼레이터). */
+export interface TableManagerOption {
+  userId: string;
+  name: string;
 }
 
 /**
@@ -67,6 +83,8 @@ interface ExpertRow {
   name: string;
   org: string | null;
   tableCode: string;
+  /** 이 전문가의 기본 테이블 id. 담당자 배정 대상(없으면 null=배정 불가). */
+  tableId: string | null;
 }
 
 /**
@@ -89,6 +107,11 @@ export function TimeGridSheet({
   photoCountByStartup,
   photoFilter,
   onOpenPhotos,
+  operators,
+  managerByTable,
+  onSetTableManager,
+  canManage,
+  managerPending,
 }: TimeGridSheetProps) {
   const { columns, byExpert } = useMemo(() => buildBookingSchedule(slots), [slots]);
 
@@ -119,6 +142,7 @@ export function TimeGridSheet({
         name: u?.name ?? '(알 수 없는 전문가)',
         org: u?.expert_organization ?? null,
         tableCode: tid ? (tableCodeById.get(tid) ?? '미지정') : '미지정',
+        tableId: tid,
       };
     });
     return rows.sort(
@@ -180,6 +204,15 @@ export function TimeGridSheet({
                       {row.org}
                     </span>
                   )}
+                  {/* 테이블 현장 담당자(오퍼레이터) — 1열 하단 입력 영역. 담당 전문가와 별개. */}
+                  <TableManagerField
+                    tableId={row.tableId}
+                    managerId={row.tableId ? (managerByTable.get(row.tableId) ?? null) : null}
+                    operators={operators}
+                    canManage={canManage}
+                    disabled={locked || managerPending}
+                    onSetManager={onSetTableManager}
+                  />
                 </th>
                 {columns.map((c) => {
                   const slot = cells?.get(c);
@@ -209,6 +242,69 @@ export function TimeGridSheet({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * 1열(테이블·전문가) 하단 현장 담당자 영역.
+ * - 테이블 미지정(전문가에 기본 테이블 없음): 배정 불가 안내.
+ * - canManage: 오퍼레이터 셀렉트로 지정/해제(set_table_manager).
+ * - 그 외: 읽기전용 칩으로 현재 담당자만 표시.
+ */
+function TableManagerField({
+  tableId,
+  managerId,
+  operators,
+  canManage,
+  disabled,
+  onSetManager,
+}: {
+  tableId: string | null;
+  managerId: string | null;
+  operators: TableManagerOption[];
+  canManage: boolean;
+  disabled: boolean;
+  onSetManager: (tableId: string, userId: string | null) => void;
+}) {
+  const managerName = managerId
+    ? (operators.find((o) => o.userId === managerId)?.name ?? '(배정 외 담당자)')
+    : null;
+
+  if (!tableId) {
+    return (
+      <p className="mt-2 text-[10px] font-medium text-neutral-base/40">
+        담당자: 테이블 미지정
+      </p>
+    );
+  }
+
+  if (!canManage) {
+    return (
+      <p className="mt-2 flex items-center gap-1 text-[10px] font-medium text-neutral-base/60">
+        <span className="text-neutral-base/45">담당자</span>
+        <span className="font-bold text-neutral-base/80">{managerName ?? '미지정'}</span>
+      </p>
+    );
+  }
+
+  return (
+    <label className="mt-2 block">
+      <span className="mb-0.5 block text-[10px] font-semibold text-neutral-base/45">현장 담당자</span>
+      <select
+        value={managerId ?? ''}
+        disabled={disabled}
+        onChange={(e) => onSetManager(tableId, e.target.value || null)}
+        aria-label="테이블 현장 담당자"
+        className="w-full rounded-md border border-border bg-surface-raised px-1.5 py-1 text-[11px] font-medium text-neutral-base outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50"
+      >
+        <option value="">미지정</option>
+        {operators.map((o) => (
+          <option key={o.userId} value={o.userId}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

@@ -63,7 +63,7 @@ export function useEventTables(eventId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('event_tables')
-        .select('id,event_id,table_code,description,is_active')
+        .select('id,event_id,table_code,description,is_active,manager_user_id')
         .eq('event_id', eventId)
         .order('table_code', { ascending: true })
         .returns<EventTable[]>();

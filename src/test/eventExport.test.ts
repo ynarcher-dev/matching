@@ -63,7 +63,7 @@ const userById = new Map<string, AssignableUser>([
 ]);
 
 const tables: EventTable[] = [
-  { id: 'T1', event_id: 'E', table_code: 'A-01', description: null, is_active: true },
+  { id: 'T1', event_id: 'E', table_code: 'A-01', description: null, is_active: true, manager_user_id: null },
 ];
 
 function slot(p: Partial<MatchingSlotRow> & Pick<MatchingSlotRow, 'id'>): MatchingSlotRow {

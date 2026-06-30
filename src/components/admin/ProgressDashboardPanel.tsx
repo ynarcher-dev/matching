@@ -15,6 +15,8 @@ import {
   useSetSessionStatus,
   useReplaceNoShow,
 } from '@/hooks/useEventDashboard';
+import { useSetTableManager } from '@/hooks/useEventDetailMutations';
+import { useEventOperators } from '@/hooks/useOperators';
 import { useEventCompanyPhotos } from '@/hooks/useCompanyPhotos';
 import { computeProgressStats } from '@/lib/booking';
 import { participantLabel, SESSION_STATUS_TONE } from '@/lib/labels';
@@ -34,6 +36,8 @@ interface ProgressDashboardPanelProps {
   userById: Map<string, AssignableUser>;
   timezone: string;
   locked: boolean;
+  /** 테이블 담당자 지정 권한(OWNER/MANAGER). 1열 담당자 셀렉트 편집 가능 여부. */
+  canManage: boolean;
 }
 
 /**
@@ -48,6 +52,7 @@ export function ProgressDashboardPanel({
   userById,
   timezone,
   locked,
+  canManage,
 }: ProgressDashboardPanelProps) {
   const slotsQ = useEventSlots(eventId, { refetchInterval: DASHBOARD_POLL_MS });
   const slots = useMemo(() => slotsQ.data ?? [], [slotsQ.data]);
@@ -59,6 +64,19 @@ export function ProgressDashboardPanel({
 
   const replaceNoShow = useReplaceNoShow(eventId);
   const [replaceTarget, setReplaceTarget] = useState<MatchingSlotRow | null>(null);
+
+  // 테이블 현장 담당자(1열 하단 셀렉트) — 후보 = 행사 배정 오퍼레이터(STAFF+).
+  const setTableManager = useSetTableManager(eventId);
+  const operatorsQ = useEventOperators(eventId);
+  const managerOptions = useMemo(
+    () =>
+      (operatorsQ.data ?? []).map((o) => ({ userId: o.user_id, name: o.operator_name })),
+    [operatorsQ.data],
+  );
+  const managerByTable = useMemo(
+    () => new Map(tables.map((t) => [t.id, t.manager_user_id])),
+    [tables],
+  );
 
   // 현장 대기 후보 = 행사 참가 스타트업(AssignableUser).
   const startupUsers = useMemo<AssignableUser[]>(
@@ -131,7 +149,9 @@ export function ProgressDashboardPanel({
   const pending = noShow.isPending || setSessionStatus.isPending;
   const actionError = setSessionStatus.isError
     ? (setSessionStatus.error as Error).message
-    : null;
+    : setTableManager.isError
+      ? (setTableManager.error as Error).message
+      : null;
 
   const noShowStartup = noShowTarget?.startup_id
     ? userById.get(noShowTarget.startup_id)
@@ -204,6 +224,13 @@ export function ProgressDashboardPanel({
           }
           onReplaceNoShow={setReplaceTarget}
           onOpenPhotos={(slot) => slot.startup_id && setPhotoTarget(slot.startup_id)}
+          operators={managerOptions}
+          managerByTable={managerByTable}
+          onSetTableManager={(tableId, userId) =>
+            setTableManager.mutate({ tableId, userId })
+          }
+          canManage={canManage}
+          managerPending={setTableManager.isPending}
         />
       </Card>
 
