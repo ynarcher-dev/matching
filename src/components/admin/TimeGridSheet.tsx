@@ -1,16 +1,12 @@
 import { useMemo } from 'react';
 import { buildBookingSchedule } from '@/lib/booking';
-import { attendanceStatusFor } from '@/lib/attendance';
 import { formatDateTime } from '@/lib/datetime';
-import { AttendanceSegmentedControl } from '@/components/common/AttendanceSegmentedControl';
 import { BADGE_TONE, SOLID_TONE, type Tone } from '@/lib/tone';
 import {
   companyName,
-  PARTICIPANT_ROLE_LABELS,
   SESSION_STATUS_LABELS,
   SESSION_STATUS_TONE,
 } from '@/lib/labels';
-import type { AttendanceLogRow, AttendanceStatus } from '@/types/attendance';
 import type {
   AssignableUser,
   EventParticipantRow,
@@ -24,18 +20,13 @@ interface TimeGridSheetProps {
   participants: EventParticipantRow[];
   tables: EventTable[];
   userById: Map<string, AssignableUser>;
-  attendance: Map<string, AttendanceLogRow>;
   timezone: string;
   locked: boolean;
-  /** 출석/노쇼 mutation 진행 중 — 셀 버튼 비활성. */
+  /** 상태/노쇼 mutation 진행 중 — 셀 버튼 비활성. */
   pending: boolean;
-  /** 스타트업 출석 상태 선택(미정=null / 출석 / 불참). */
-  onSetStartup: (slot: MatchingSlotRow, next: AttendanceStatus | null) => void;
-  /** 전문가 출석 상태 선택(관리자/스태프 대리, 미정=null / 출석 / 불참). */
-  onSetExpert: (slot: MatchingSlotRow, next: AttendanceStatus | null) => void;
   /** 노쇼 처리(사유 모달 오픈). */
   onMarkNoShow: (slot: MatchingSlotRow) => void;
-  /** 진행 상태 직접 설정(대기중/진행중/완료, 관리/스태프). */
+  /** 진행 상태 직접 설정(대기중/진행중/완료, 관리/스태프). 출석은 상태 전환에 따라 자동 동기화된다. */
   onSetSessionStatus: (slot: MatchingSlotRow, status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED') => void;
 }
 
@@ -72,21 +63,18 @@ interface ExpertRow {
 
 /**
  * 실시간 진행 타임그리드 (page_admin_event_detail.md §3.1, 설계 §4 TimeGridSheet).
- * 행=전문가(테이블·이름·소속), 열=시작시각. 셀=진행 상태 배지 + 기업명·대표자명 + 출석 + 진행 액션.
- * 셀 배경색은 진행 상태(진행현황) 기준. 스타트업·전문가 출석은 관리/스태프가 원클릭 처리하고,
- * 대기중 세션은 [상담 시작]으로 진행중 전환(0050 대리 허용). 완료는 전문가 상담일지 제출로 처리.
+ * 행=전문가(테이블·이름·소속), 열=시작시각. 셀=진행 상태 배지 + 기업명·대표자명 + 진행 액션.
+ * 셀 배경색은 진행 상태(진행현황) 기준. 출석은 별도 마킹 없이 진행 상태 버튼이 단일 제어한다
+ * (ideation §1): 진행/완료=출석 자동, 노쇼=불참 자동. 완료는 전문가 상담일지 제출로도 처리된다.
  */
 export function TimeGridSheet({
   slots,
   participants,
   tables,
   userById,
-  attendance,
   timezone,
   locked,
   pending,
-  onSetStartup,
-  onSetExpert,
   onMarkNoShow,
   onSetSessionStatus,
 }: TimeGridSheetProps) {
@@ -191,11 +179,8 @@ export function TimeGridSheet({
                       <GridCell
                         slot={slot}
                         userById={userById}
-                        attendance={attendance}
                         locked={locked}
                         pending={pending}
-                        onSetStartup={onSetStartup}
-                        onSetExpert={onSetExpert}
                         onMarkNoShow={onMarkNoShow}
                         onSetSessionStatus={onSetSessionStatus}
                       />
@@ -211,25 +196,19 @@ export function TimeGridSheet({
   );
 }
 
-/** 한 칸: 진행 상태 배지 + 기업명/대표자명 + 전문가/스타트업 출석 + 진행 액션. */
+/** 한 칸: 진행 상태 배지 + 기업명/대표자명 + 진행 액션(대기/진행/완료/노쇼). 출석은 상태가 자동 처리. */
 function GridCell({
   slot,
   userById,
-  attendance,
   locked,
   pending,
-  onSetStartup,
-  onSetExpert,
   onMarkNoShow,
   onSetSessionStatus,
 }: {
   slot: MatchingSlotRow | undefined;
   userById: Map<string, AssignableUser>;
-  attendance: Map<string, AttendanceLogRow>;
   locked: boolean;
   pending: boolean;
-  onSetStartup: (slot: MatchingSlotRow, next: AttendanceStatus | null) => void;
-  onSetExpert: (slot: MatchingSlotRow, next: AttendanceStatus | null) => void;
   onMarkNoShow: (slot: MatchingSlotRow) => void;
   onSetSessionStatus: (slot: MatchingSlotRow, status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED') => void;
 }) {
@@ -239,8 +218,6 @@ function GridCell({
   }
 
   const startup = userById.get(slot.startup_id);
-  const expertStatus = attendanceStatusFor(attendance, slot.id, slot.expert_id);
-  const startupStatus = attendanceStatusFor(attendance, slot.id, slot.startup_id);
   const status = slot.session_status;
   // 노쇼는 대기/진행 상태에서만 설정 가능(mark_no_show 가드). 그 외는 대기/진행/완료로 되돌려서.
   const noShowSettable = status === 'WAITING' || status === 'IN_PROGRESS';
@@ -266,28 +243,8 @@ function GridCell({
         )}
       </div>
 
-      <div className="flex flex-col items-stretch gap-1">
-        <AttendanceSegmentedControl
-          label={PARTICIPANT_ROLE_LABELS.EXPERT}
-          status={expertStatus}
-          disabled={locked || pending}
-          onChange={(next) => onSetExpert(slot, next)}
-          size="sm"
-          layout="inline"
-          showText={false}
-        />
-        <AttendanceSegmentedControl
-          label={PARTICIPANT_ROLE_LABELS.STARTUP}
-          status={startupStatus}
-          disabled={locked || pending}
-          onChange={(next) => onSetStartup(slot, next)}
-          size="sm"
-          layout="inline"
-          showText={false}
-        />
-      </div>
-
-      {/* 진행 상태 직접 제어(대기/진행/완료/노쇼) — 2×2 동일 크기 버튼. 관리자가 자유 전환. */}
+      {/* 진행 상태 직접 제어(대기/진행/완료/노쇼) — 2×2 동일 크기 버튼. 관리자가 자유 전환.
+          출석은 별도 마킹 없이 상태 전환에 따라 백엔드가 자동 동기화한다(ideation §1). */}
       <div className="grid grid-cols-2 gap-1">
         <StatusButton
           label="대기"

@@ -8,17 +8,12 @@ import { TimeGridSheet } from '@/components/admin/TimeGridSheet';
 import { useEventSlots } from '@/hooks/useEventDetail';
 import {
   DASHBOARD_POLL_MS,
-  useCheckIn,
-  useClearAttendance,
   useMarkNoShow,
   useSetSessionStatus,
-  useSlotAttendance,
 } from '@/hooks/useEventDashboard';
-import { latestAttendanceMap } from '@/lib/attendance';
 import { computeProgressStats } from '@/lib/booking';
 import { participantLabel, SESSION_STATUS_TONE } from '@/lib/labels';
 import { BADGE_TONE } from '@/lib/tone';
-import type { AttendanceStatus } from '@/types/attendance';
 import type {
   AssignableUser,
   EventParticipantRow,
@@ -50,54 +45,16 @@ export function ProgressDashboardPanel({
 }: ProgressDashboardPanelProps) {
   const slotsQ = useEventSlots(eventId, { refetchInterval: DASHBOARD_POLL_MS });
   const slots = useMemo(() => slotsQ.data ?? [], [slotsQ.data]);
-  const slotIds = useMemo(() => slots.map((s) => s.id), [slots]);
-
-  const attendanceQ = useSlotAttendance(eventId, slotIds);
-  const attendance = useMemo(
-    () => latestAttendanceMap(attendanceQ.data ?? []),
-    [attendanceQ.data],
-  );
   const progress = useMemo(() => computeProgressStats(slots), [slots]);
 
-  const checkIn = useCheckIn(eventId);
-  const clearAttendance = useClearAttendance(eventId);
   const noShow = useMarkNoShow(eventId);
   const setSessionStatus = useSetSessionStatus(eventId);
   const [noShowTarget, setNoShowTarget] = useState<MatchingSlotRow | null>(null);
 
-  const pending =
-    checkIn.isPending || clearAttendance.isPending || noShow.isPending || setSessionStatus.isPending;
-  const actionError = checkIn.isError
-    ? (checkIn.error as Error).message
-    : clearAttendance.isError
-      ? (clearAttendance.error as Error).message
-      : setSessionStatus.isError
-        ? (setSessionStatus.error as Error).message
-        : null;
-
-  /** 출석 상태 직접 선택: null=미정(기록 삭제), PRESENT/ABSENT=check_in. */
-  const setAttendance = (
-    slot: MatchingSlotRow,
-    userId: string,
-    roleType: 'EXPERT' | 'STARTUP',
-    next: AttendanceStatus | null,
-  ) => {
-    if (next === null) {
-      clearAttendance.mutate({ slotId: slot.id, userId, roleType });
-    } else {
-      checkIn.mutate({ slotId: slot.id, userId, roleType, status: next });
-    }
-  };
-
-  const handleSetStartup = (slot: MatchingSlotRow, next: AttendanceStatus | null) => {
-    if (!slot.startup_id) return;
-    setAttendance(slot, slot.startup_id, 'STARTUP', next);
-  };
-
-  // 전문가 출석 대리 처리(관리자/스태프) — 전문가 노쇼·현장 누락 대응(0019 RPC 완화).
-  const handleSetExpert = (slot: MatchingSlotRow, next: AttendanceStatus | null) => {
-    setAttendance(slot, slot.expert_id, 'EXPERT', next);
-  };
+  const pending = noShow.isPending || setSessionStatus.isPending;
+  const actionError = setSessionStatus.isError
+    ? (setSessionStatus.error as Error).message
+    : null;
 
   const noShowStartup = noShowTarget?.startup_id
     ? userById.get(noShowTarget.startup_id)
@@ -137,15 +94,12 @@ export function ProgressDashboardPanel({
           <Legend className={BADGE_TONE[SESSION_STATUS_TONE.COMPLETED]} label="완료" />
           <Legend className={BADGE_TONE[SESSION_STATUS_TONE.NO_SHOW]} label="노쇼" />
           <span className="ml-1 text-neutral-base/50">
-            · 셀 색은 진행 상태입니다. 각 셀에서 대기중/진행중/완료를 직접 전환할 수 있고(노쇼는 사유 버튼), 전문가 상담일지는 별도로 제출됩니다.
+            · 셀 색은 진행 상태입니다. 각 셀에서 대기중/진행중/완료를 직접 전환하면 출석이 자동 처리되고(진행·완료=출석, 노쇼=불참), 노쇼는 사유 버튼으로, 전문가 상담일지는 별도로 제출됩니다.
           </span>
         </div>
 
         {slotsQ.isError && (
           <Alert tone="error">슬롯을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</Alert>
-        )}
-        {attendanceQ.isError && (
-          <Alert tone="error">출석 정보를 불러오지 못했습니다.</Alert>
         )}
         {actionError && <Alert tone="error">{actionError}</Alert>}
 
@@ -154,12 +108,9 @@ export function ProgressDashboardPanel({
           participants={participants}
           tables={tables}
           userById={userById}
-          attendance={attendance}
           timezone={timezone}
           locked={locked}
           pending={pending}
-          onSetStartup={handleSetStartup}
-          onSetExpert={handleSetExpert}
           onMarkNoShow={setNoShowTarget}
           onSetSessionStatus={(slot, status) =>
             setSessionStatus.mutate({ slotId: slot.id, status })
