@@ -14,11 +14,15 @@
   - `TimeGridSheet` 각 셀 하단에 `📷` 버튼을 추가했다(등록 수 있으면 success 배지 `N장`, 없으면 점선 `사진 등록`). 클릭하면 `ProgressDashboardPanel` 의 모달이 열리고 기존 `CompanyPhotoUploadPanel` 을 그대로 재사용한다(촬영/미리보기/삭제/업로드). 사진은 (행사 × 스타트업 `company_user_id`) 단위라 한 스타트업의 모든 셀이 같은 묶음을 공유한다.
   - 상단 범례 영역에 "📷 사진 미등록 셀만 보기" 토글을 두었다. 켜면 사진 등록 완료 셀·빈 셀은 흐리게(`opacity-25`), 미등록 예약 셀은 `ring-warning` 으로 강조한다.
   - 백엔드 신규 없음: `useEventCompanyPhotos`/`company_photos` RLS(`is_admin_or_staff`) 를 그대로 사용한다(§4 권고대로 관리/스태프 권한).
-- **§2 노쇼 대체 매칭: 미구현(후속 과제).** 아래 결정 메모 참고.
+- **§2 노쇼 대체 매칭: 구현 완료(슬롯 재사용형).**
+  - 마이그레이션 `0063_replace_no_show.sql`: 신규 RPC `replace_no_show(p_slot_id, p_new_startup_id, p_reason)` 가 NO_SHOW 슬롯을 재사용해 현장 대기 스타트업을 새로 배정한다(WAITING 복귀, `booking_type='ADMIN_FORCE'`). 동시간/테이블 충돌은 `_validate_slot_assignment`(최대횟수만 우회)가 검증하고, 기존 노쇼 startup 의 출석 로그(ABSENT)는 정리한다. 노쇼 사실은 `mark_no_show` 가 이미 `booking_history`(NO_SHOW)+`audit_logs` 에 남겨 히스토리가 보존된다.
+  - **문자 그대로의 안1(NO_SHOW 슬롯 보존 + 별도 대기 슬롯 복제)을 채택하지 않은 이유**: 그리드(`buildBookingSchedule`)는 (전문가×시작시각)당 비-CANCELLED 슬롯 1개만 그리고, `_validate_slot_assignment` 의 전문가/테이블 동시간 충돌 검사가 같은 칸의 NO_SHOW 슬롯을 점유로 보아 새 배정을 막는다. 안1 을 글자대로 하려면 그리드를 셀당 슬롯 배열로 재설계하고 검증에 NO_SHOW 예외를 둬야 해 범위·위험이 크다. 히스토리 보존이라는 안1 의 목적은 `booking_history` 가 이미 충족하므로 슬롯 재사용형으로 구현했다(트레이드오프: 대체 매칭 후 셀에 빨간 노쇼 배지는 남지 않고 감사 로그에만 남는다).
+  - UI: `TimeGridSheet` 노쇼 셀에 "현장 대체 매칭" 버튼 → `ReplaceNoShowModal`(동시간 예약 있는 스타트업은 비활성, 사유 필수). 권한은 `can_staff_event`(현장 스태프+).
+  - 부수 수정: `0062` 가 `mark_no_show` 권한을 `can_staff_event`(0043)에서 ADMIN 전용으로 좁힌 회귀를 `0063` 에서 복구.
 
 ### 후속 결정 메모
 
-- **§2**: "안 1(노쇼 히스토리 보존형 슬롯 복제)"를 채택 방향으로 본다. 노쇼 통계(`booking_history`/`audit_logs`)가 이미 보존되므로 통계 정합성에 유리하고, 기존 제거→빈 슬롯 환원 정책(`0057`/`0059`)과 패턴이 일치한다. 구현 시 동일 시간대/테이블에 대기 슬롯을 복제하고 현장 매칭 등록 RPC 를 추가한다.
+- (없음 — §1·§2·§3 구현 완료)
 
 ---
 

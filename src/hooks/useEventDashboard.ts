@@ -10,8 +10,9 @@ import type { ParticipantRole } from '@/types/user';
  * "실시간"은 react-query refetchInterval 폴링으로 구현한다(별도 realtime 인프라 불필요).
  */
 
-/** 진행 대시보드 폴링 주기(ms). 현장 모니터링용 근실시간 갱신. */
-export const DASHBOARD_POLL_MS = 7000;
+/** 진행 대시보드 폴링 주기(ms). 현장 모니터링용 5분 갱신. */
+export const DASHBOARD_POLL_MS = 300000;
+
 
 export const attendanceKeys = {
   byEvent: (eventId: string) => ['attendance', eventId] as const,
@@ -90,13 +91,41 @@ export function useClearAttendance(eventId: string) {
   });
 }
 
-/** 노쇼 처리 — mark_no_show RPC(관리자, WAITING|IN_PROGRESS → NO_SHOW, 사유 필수). */
+/** 노쇼 처리 — mark_no_show RPC(관리/스태프, WAITING|IN_PROGRESS → NO_SHOW, 사유 필수). */
 export function useMarkNoShow(eventId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ slotId, reason }: { slotId: string; reason: string }) => {
       const { error } = await supabase.rpc('mark_no_show', {
         p_slot_id: slotId,
+        p_reason: reason.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: eventDetailKeys.slots(eventId) }),
+  });
+}
+
+/**
+ * 노쇼 현장 대체 매칭 — replace_no_show RPC (0063, ideation §2).
+ * NO_SHOW 슬롯을 재사용해 현장 대기 스타트업을 새로 배정한다(WAITING 으로 복귀).
+ * 노쇼 사실은 booking_history 에 보존되고, 동시간/테이블 충돌은 RPC 가 검증한다.
+ */
+export function useReplaceNoShow(eventId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      slotId,
+      startupId,
+      reason,
+    }: {
+      slotId: string;
+      startupId: string;
+      reason: string;
+    }) => {
+      const { error } = await supabase.rpc('replace_no_show', {
+        p_slot_id: slotId,
+        p_new_startup_id: startupId,
         p_reason: reason.trim(),
       });
       if (error) throw error;

@@ -1,5 +1,4 @@
-import { useMemo, useState } from 'react';
-import { Badge } from '@/components/common/Badge';
+import { useMemo, useState, useEffect } from 'react';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
@@ -7,12 +6,14 @@ import { Modal } from '@/components/common/Modal';
 import { Toggle } from '@/components/common/Toggle';
 import { StatBox } from '@/components/common/StatBox';
 import { TimeGridSheet } from '@/components/admin/TimeGridSheet';
+import { ReplaceNoShowModal } from '@/components/admin/ReplaceNoShowModal';
 import { CompanyPhotoUploadPanel } from '@/components/staff/CompanyPhotoUploadPanel';
 import { useEventSlots } from '@/hooks/useEventDetail';
 import {
   DASHBOARD_POLL_MS,
   useMarkNoShow,
   useSetSessionStatus,
+  useReplaceNoShow,
 } from '@/hooks/useEventDashboard';
 import { useEventCompanyPhotos } from '@/hooks/useCompanyPhotos';
 import { computeProgressStats } from '@/lib/booking';
@@ -55,6 +56,47 @@ export function ProgressDashboardPanel({
   const noShow = useMarkNoShow(eventId);
   const setSessionStatus = useSetSessionStatus(eventId);
   const [noShowTarget, setNoShowTarget] = useState<MatchingSlotRow | null>(null);
+
+  const replaceNoShow = useReplaceNoShow(eventId);
+  const [replaceTarget, setReplaceTarget] = useState<MatchingSlotRow | null>(null);
+
+  // 현장 대기 후보 = 행사 참가 스타트업(AssignableUser).
+  const startupUsers = useMemo<AssignableUser[]>(
+    () =>
+      participants
+        .filter((p) => p.participant_type === 'STARTUP')
+        .map((p) => userById.get(p.user_id))
+        .filter((u): u is AssignableUser => !!u),
+    [participants, userById],
+  );
+
+  // 새로고침 남은 시간 타이머 (5분 = 300초)
+  const [timeLeft, setTimeLeft] = useState(300);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          slotsQ.refetch();
+          return 300;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [slotsQ]);
+
+  // 데이터 갱신 시 타이머 리셋
+  useEffect(() => {
+    setTimeLeft(300);
+  }, [slotsQ.data]);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
 
   // 증빙사진 통합(ideation §3): 진행 현황판에서 셀별로 바로 업로드/검수한다.
   // 사진은 (행사 × 스타트업 company_user_id) 단위 — 한 스타트업의 모든 셀이 같은 사진 묶음을 공유한다.
@@ -100,13 +142,13 @@ export function ProgressDashboardPanel({
       <Card className="flex flex-col gap-4 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold text-neutral-base">실시간 진행 현황</h2>
-          <Badge
-            tone="success"
-            size="11"
-            icon={<span className="block h-1.5 w-1.5 animate-pulse rounded-full bg-success" />}
-          >
-            LIVE {Math.round(DASHBOARD_POLL_MS / 1000)}초마다 새로 갱신됩니다.
-          </Badge>
+          <div className="flex items-center gap-2 text-xs font-semibold text-neutral-base">
+            <span className="flex items-center gap-1.5 rounded-full bg-danger-surface px-2.5 py-1 text-[11px] font-bold text-danger border border-danger-border">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-danger" />
+              LIVE
+            </span>
+            <span>{formatTime(timeLeft)} 후 자동 갱신</span>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -160,6 +202,7 @@ export function ProgressDashboardPanel({
           onSetSessionStatus={(slot, status) =>
             setSessionStatus.mutate({ slotId: slot.id, status })
           }
+          onReplaceNoShow={setReplaceTarget}
           onOpenPhotos={(slot) => slot.startup_id && setPhotoTarget(slot.startup_id)}
         />
       </Card>
@@ -183,6 +226,28 @@ export function ProgressDashboardPanel({
             noShow.mutate(
               { slotId: noShowTarget.id, reason },
               { onSuccess: () => setNoShowTarget(null) },
+            );
+          }
+        }}
+      />
+
+      {/* 현장 대체 매칭 모달 */}
+      <ReplaceNoShowModal
+        open={replaceTarget !== null}
+        onClose={() => setReplaceTarget(null)}
+        slot={replaceTarget}
+        slots={slots}
+        startups={startupUsers}
+        userById={userById}
+        tables={tables}
+        timezone={timezone}
+        loading={replaceNoShow.isPending}
+        error={replaceNoShow.isError ? (replaceNoShow.error as Error).message : null}
+        onConfirm={(startupId: string, reason: string) => {
+          if (replaceTarget) {
+            replaceNoShow.mutate(
+              { slotId: replaceTarget.id, startupId, reason },
+              { onSuccess: () => setReplaceTarget(null) },
             );
           }
         }}

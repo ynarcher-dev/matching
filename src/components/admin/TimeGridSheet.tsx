@@ -28,6 +28,8 @@ interface TimeGridSheetProps {
   onMarkNoShow: (slot: MatchingSlotRow) => void;
   /** 진행 상태 직접 설정(대기중/진행중/완료, 관리/스태프). 출석은 상태 전환에 따라 자동 동기화된다. */
   onSetSessionStatus: (slot: MatchingSlotRow, status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED') => void;
+  /** 노쇼 슬롯에 현장 대기 스타트업 대체 매칭(모달 오픈, ideation §2). */
+  onReplaceNoShow: (slot: MatchingSlotRow) => void;
   /** 스타트업(company_user_id)별 등록된 증빙사진 수 — 셀 📷 배지/필터 (ideation §3). */
   photoCountByStartup: Map<string, number>;
   /** "사진 미등록 셀만 보기" — 켜면 사진 있는 셀을 흐리게, 미등록 셀을 강조한다. */
@@ -83,6 +85,7 @@ export function TimeGridSheet({
   pending,
   onMarkNoShow,
   onSetSessionStatus,
+  onReplaceNoShow,
   photoCountByStartup,
   photoFilter,
   onOpenPhotos,
@@ -194,6 +197,7 @@ export function TimeGridSheet({
                         photoFilter={photoFilter}
                         onMarkNoShow={onMarkNoShow}
                         onSetSessionStatus={onSetSessionStatus}
+                        onReplaceNoShow={onReplaceNoShow}
                         onOpenPhotos={onOpenPhotos}
                       />
                     </td>
@@ -218,6 +222,7 @@ function GridCell({
   photoFilter,
   onMarkNoShow,
   onSetSessionStatus,
+  onReplaceNoShow,
   onOpenPhotos,
 }: {
   slot: MatchingSlotRow | undefined;
@@ -228,6 +233,7 @@ function GridCell({
   photoFilter: boolean;
   onMarkNoShow: (slot: MatchingSlotRow) => void;
   onSetSessionStatus: (slot: MatchingSlotRow, status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED') => void;
+  onReplaceNoShow: (slot: MatchingSlotRow) => void;
   onOpenPhotos: (slot: MatchingSlotRow) => void;
 }) {
   // 사진 필터 켜짐: 사진과 무관한 칸(빈 칸/빈 슬롯)은 흐리게 처리해 미등록 셀을 부각한다.
@@ -310,6 +316,18 @@ function GridCell({
           onClick={() => onMarkNoShow(slot)}
         />
       </div>
+
+      {/* 노쇼 현장 대체 매칭(ideation §2): 노쇼 슬롯을 재사용해 현장 대기 스타트업을 새로 배정. */}
+      {status === 'NO_SHOW' && (
+        <button
+          type="button"
+          disabled={locked || pending}
+          onClick={() => onReplaceNoShow(slot)}
+          className="rounded-md border border-info-border bg-info-surface px-1 py-1 text-[10px] font-bold text-info transition-colors hover:brightness-95 disabled:opacity-50"
+        >
+          현장 대체 매칭
+        </button>
+      )}
 
       {/* 증빙사진 통합(ideation §3): 셀에서 바로 업로드/검수 모달을 연다. 사진은 (행사×스타트업) 단위. */}
       <PhotoCellButton count={photoCount} onClick={() => onOpenPhotos(slot)} />
