@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { Spinner } from '@/components/common/Spinner';
 import { Modal } from '@/components/common/Modal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
@@ -148,7 +149,7 @@ function QuestionEditorModal({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="문항 아래에 표시될 안내 문구"
             maxLength={500}
-            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+            className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
           />
         </div>
 
@@ -164,7 +165,7 @@ function QuestionEditorModal({
                     setOptions((prev) => prev.map((o, i) => (i === idx ? e.target.value : o)))
                   }
                   placeholder={`선택지 ${idx + 1}`}
-                  className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+                  className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
                 />
                 <Button
                   type="button"
@@ -360,9 +361,7 @@ export function SurveyBuilderPanel({
 
   const roleQuestions = useMemo(
     () =>
-      questions
-        .filter((q) => q.target_role === activeRole)
-        .sort((a, b) => a.order_no - b.order_no),
+      questions.filter((q) => q.target_role === activeRole).sort((a, b) => a.order_no - b.order_no),
     [questions, activeRole],
   );
 
@@ -434,7 +433,9 @@ export function SurveyBuilderPanel({
       {(questionsQ.isError || countQ.isError) && (
         <Alert tone="error">설문 정보를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
       )}
-      {reorderM.isError && <Alert tone="error">순서를 변경하지 못했습니다. 다시 시도해 주세요.</Alert>}
+      {reorderM.isError && (
+        <Alert tone="error">순서를 변경하지 못했습니다. 다시 시도해 주세요.</Alert>
+      )}
       {deleteM.isError && <Alert tone="error">{(deleteM.error as Error).message}</Alert>}
       {templateM.isError && <Alert tone="error">{(templateM.error as Error).message}</Alert>}
 
@@ -447,7 +448,9 @@ export function SurveyBuilderPanel({
               variant="outline"
               loading={templateM.isPending}
               onClick={() =>
-                templateM.mutate(isExpertScope ? defaultExpertTemplate() : defaultTemplate('STARTUP'))
+                templateM.mutate(
+                  isExpertScope ? defaultExpertTemplate() : defaultTemplate('STARTUP'),
+                )
               }
             >
               기본 문항 불러오기
@@ -466,7 +469,9 @@ export function SurveyBuilderPanel({
 
       {editable && (
         <div className="flex justify-end">
-          <Button onClick={openNew}>+ 문항 추가</Button>
+          <SectionActionButton tone="primary" onClick={openNew}>
+            + 문항 추가
+          </SectionActionButton>
         </div>
       )}
 

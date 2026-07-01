@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
-import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { Modal } from '@/components/common/Modal';
 import { Tabs } from '@/components/common/Tabs';
 import { FullScreenLoader } from '@/components/common/FullScreenLoader';
@@ -21,6 +21,8 @@ import { CounselingReportPanel } from '@/components/admin/CounselingReportPanel'
 import { NotificationLogPanel } from '@/components/admin/NotificationLogPanel';
 import { EventNotificationSettingsPanel } from '@/components/admin/EventNotificationSettingsPanel';
 import { EventFormModal } from '@/components/admin/EventFormModal';
+import { StatusOverrideModal } from '@/components/admin/StatusOverrideModal';
+import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { OperationsPanel } from '@/components/admin/OperationsPanel';
 import {
   useAssignableUsers,
@@ -30,6 +32,7 @@ import {
   useEventTables,
 } from '@/hooks/useEventDetail';
 import { useEventExport } from '@/hooks/useEventExport';
+import { useClearEventStatusOverride } from '@/hooks/useEventMutations';
 import { useMyEventRoles } from '@/hooks/useMyEventRoles';
 import { useEventOperators } from '@/hooks/useOperators';
 import { useGlobalNotificationSettings } from '@/hooks/useNotificationSettings';
@@ -128,6 +131,10 @@ export function EventDetailView() {
   // 상세에서 바로 행사 정보를 수정하는 모달(목록과 동일한 EventFormModal 재사용).
   // 운영자(관리자) 배정도 이 모달의 '관리자' 섹션에서 처리한다.
   const [editOpen, setEditOpen] = useState(false);
+  // 상태 수동 변경(고정) / 자동 전환 재개(고정 해제) — 최고 관리자 전용.
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
+  const clearOverride = useClearEventStatusOverride();
 
   const userById = useMemo(
     () => new Map<string, AssignableUser>((usersQ.data ?? []).map((u) => [u.id, u])),
@@ -141,7 +148,8 @@ export function EventDetailView() {
     return (
       <Card className="p-6">
         <Alert tone="error">
-          이 행사에 대한 접근 권한이 없습니다. 행사 권한이 필요하면 운영본부(최고관리자)에 문의해 주세요.
+          이 행사에 대한 접근 권한이 없습니다. 행사 권한이 필요하면 운영본부(최고관리자)에 문의해
+          주세요.
         </Alert>
       </Card>
     );
@@ -150,7 +158,8 @@ export function EventDetailView() {
     return (
       <Card className="p-6">
         <Alert tone="error">
-          행사를 불러오지 못했습니다. {(eventQ.error as Error | null)?.message ?? '존재하지 않는 행사입니다.'}
+          행사를 불러오지 못했습니다.{' '}
+          {(eventQ.error as Error | null)?.message ?? '존재하지 않는 행사입니다.'}
         </Alert>
       </Card>
     );
@@ -206,21 +215,31 @@ export function EventDetailView() {
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {/* 상태 수동 변경/자동 전환 재개는 최고 관리자만(override RPC = is_super_admin). */}
+                {myRoles.isSuper && (
+                  <SectionActionButton onClick={() => setStatusOpen(true)}>
+                    상태 변경
+                  </SectionActionButton>
+                )}
+                {myRoles.isSuper && event.status_override && (
+                  <SectionActionButton onClick={() => setResumeOpen(true)}>
+                    자동 전환 재개
+                  </SectionActionButton>
+                )}
                 {/* 상세에서 바로 행사 정보 수정(목록으로 돌아갈 필요 없이). 편집은 MANAGER 이상. */}
                 {canManage && !locked && (
-                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                  <SectionActionButton onClick={() => setEditOpen(true)}>
                     행사 정보 수정
-                  </Button>
+                  </SectionActionButton>
                 )}
                 {/* 다운로드는 정책상 MANAGER 이상(§3.3). */}
                 {canManage && (
-                  <Button
-                    variant="outline"
+                  <SectionActionButton
                     onClick={() => exporter.mutate({ title: event.title })}
                     disabled={exporter.isPending}
                   >
                     {exporter.isPending ? '엑셀 생성 중…' : '엑셀 내보내기'}
-                  </Button>
+                  </SectionActionButton>
                 )}
               </div>
             </div>
@@ -229,7 +248,9 @@ export function EventDetailView() {
       />
 
       {locked && (
-        <Alert tone="info">취소된 행사입니다. 조회만 가능하며 편집·조정 기능은 잠겨 있습니다.</Alert>
+        <Alert tone="info">
+          취소된 행사입니다. 조회만 가능하며 편집·조정 기능은 잠겨 있습니다.
+        </Alert>
       )}
 
       <Tabs<DetailTab>
@@ -246,7 +267,9 @@ export function EventDetailView() {
       )}
 
       {(participantsQ.isError || tablesQ.isError || slotsQ.isError || usersQ.isError) && (
-        <Alert tone="error">일부 데이터를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
+        <Alert tone="error">
+          일부 데이터를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.
+        </Alert>
       )}
 
       {activeTab === 'tables' && (
@@ -264,6 +287,7 @@ export function EventDetailView() {
             participants={participants}
             userById={userById}
             locked={locked}
+            canManage={canManage}
           />
         </div>
       )}
@@ -313,7 +337,6 @@ export function EventDetailView() {
           userById={userById}
           timezone={event.timezone}
           locked={locked}
-          canManage={canManage}
         />
       )}
 
@@ -366,9 +389,9 @@ export function EventDetailView() {
         <div className="flex flex-col gap-3">
           {canManage && (
             <div className="flex justify-end">
-              <Button variant="outline" onClick={() => setSettingsTab('notifications')}>
+              <SectionActionButton onClick={() => setSettingsTab('notifications')}>
                 행사알림 설정
-              </Button>
+              </SectionActionButton>
             </div>
           )}
           <NotificationLogPanel eventId={eventId} timezone={event.timezone} />
@@ -409,6 +432,35 @@ export function EventDetailView() {
           관리자(운영자) 배정도 이 폼의 '관리자' 섹션에서 처리한다. */}
       {canManage && !locked && (
         <EventFormModal open={editOpen} onClose={() => setEditOpen(false)} event={event} />
+      )}
+
+      {/* 상태 수동 변경(고정) / 자동 전환 재개 — 최고 관리자 전용. */}
+      {myRoles.isSuper && (
+        <>
+          <StatusOverrideModal
+            open={statusOpen}
+            onClose={() => setStatusOpen(false)}
+            event={event}
+          />
+          <ConfirmModal
+            open={resumeOpen}
+            onClose={() => setResumeOpen(false)}
+            title="자동 전환 재개"
+            confirmLabel="자동 전환 재개"
+            requireReason
+            reasonLabel="해제 사유 (필수)"
+            reasonPlaceholder="감사 로그에 기록됩니다."
+            loading={clearOverride.isPending}
+            error={clearOverride.error ? (clearOverride.error as Error).message : null}
+            message="상태 고정을 해제하면 예약·행사 일정에 따라 상태가 다시 자동으로 전환됩니다. 현재 상태가 일정과 다르면 즉시 일정에 맞는 상태로 바뀔 수 있습니다."
+            onConfirm={(reason) =>
+              clearOverride.mutate(
+                { id: eventId, reason },
+                { onSuccess: () => setResumeOpen(false) },
+              )
+            }
+          />
+        </>
       )}
     </div>
   );

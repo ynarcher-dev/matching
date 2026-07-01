@@ -19,7 +19,7 @@ export function InlineSelect({ options, ariaLabel, className = '', ...rest }: In
   return (
     <select
       aria-label={ariaLabel}
-      className={`rounded-md border border-border bg-surface-raised px-2 py-1 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`h-7 rounded-md border border-border bg-surface-raised px-2 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...rest}
     >
       {options.map((o) => (

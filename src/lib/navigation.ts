@@ -45,6 +45,8 @@ export function homePathFor(role: AppRole): string {
   return ROLE_HOME_PATH[role];
 }
 
+const ALL_NAV_ITEMS: NavItem[] = Object.values(ROLE_NAV).flat();
+
 /**
  * 사용자별 사이드바 메뉴 (page_admin_operator_permissions.md §5.1).
  * 일반 ADMIN/STAFF 는 역할 메뉴를 쓰되, 전역 화면(스타트업/전문가 DB·안내발송 관리·운영자 관리)은
@@ -64,4 +66,11 @@ export function navItemsFor(user: AppUser): NavItem[] {
     return items;
   }
   return ROLE_NAV[user.role];
+}
+
+/** 현재 경로에 해당하는 상단 헤더 제목. */
+export function getNavTitle(pathname: string): string {
+  const item = ALL_NAV_ITEMS.find((n) => pathname === n.path || pathname.startsWith(`${n.path}/`));
+  if (item?.label === '행사 목록') return '비즈니스 매칭';
+  return item?.label ?? '비즈니스 매칭';
 }

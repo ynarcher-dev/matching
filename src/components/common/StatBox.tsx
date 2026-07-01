@@ -7,23 +7,14 @@ export function StatBox({
   label,
   value,
   hint,
-  tone = 'default',
 }: {
   label: string;
   value: number | string;
   hint?: string;
-  /** 값 강조 색: 기본(중립) · 진행(info) · 양호(success) · 주의(warning). */
-  tone?: 'default' | 'info' | 'success' | 'warning';
 }) {
-  const valueColor = {
-    default: 'text-neutral-base',
-    info: 'text-info',
-    success: 'text-success',
-    warning: 'text-[#e22213]',
-  }[tone];
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-surface/40 px-3 py-4 text-center">
-      <p className={`text-2xl font-extrabold leading-none ${valueColor}`}>
+      <p className="text-2xl font-extrabold leading-none text-neutral-base">
         {value}
         {hint && (
           <span className="ml-1 text-sm font-semibold text-neutral-base/60">

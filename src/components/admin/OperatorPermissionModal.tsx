@@ -26,7 +26,7 @@ const PERMISSION_OPTIONS = (Object.keys(OPERATOR_PERMISSION_LABELS) as OperatorP
  * 현재 활성 권한 목록 + 부여/등급 변경(grant=멱등) + 회수. 모두 사유 필수.
  */
 export function OperatorPermissionModal({ open, onClose, operator }: OperatorPermissionModalProps) {
-  const { data: roles, isLoading } = useEventOperatorRoles(open ? operator?.id ?? null : null);
+  const { data: roles, isLoading } = useEventOperatorRoles(open ? (operator?.id ?? null) : null);
   const { data: events } = useEvents();
   const grant = useGrantEventOperator();
   const revoke = useRevokeEventOperator();
@@ -167,7 +167,7 @@ export function OperatorPermissionModal({ open, onClose, operator }: OperatorPer
                 onChange={(e) => setReason(e.target.value)}
                 onBlur={() => setTouched(true)}
                 placeholder="예: 해당 행사 운영 담당 배정"
-                className={`w-full rounded-lg border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 ${
+                className={`h-9 w-full rounded-lg border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 ${
                   touched && reason.trim().length === 0 ? 'border-brand' : 'border-border'
                 }`}
               />

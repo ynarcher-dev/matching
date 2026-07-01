@@ -18,7 +18,10 @@ interface RoleTabsProps {
  */
 export function RoleTabs({ active, onChange }: RoleTabsProps) {
   return (
-    <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1" role="tablist">
+    <div
+      className="grid min-h-9 grid-cols-3 items-center gap-1 rounded-lg bg-muted p-1"
+      role="tablist"
+    >
       {TABS.map((tab) => {
         const selected = tab.key === active;
         return (
@@ -28,10 +31,8 @@ export function RoleTabs({ active, onChange }: RoleTabsProps) {
             role="tab"
             aria-selected={selected}
             onClick={() => onChange(tab.key)}
-            className={`rounded-md px-2 py-2 text-sm font-semibold transition-colors ${
-              selected
-                ? 'bg-white text-brand shadow-sm'
-                : 'bg-transparent text-neutral-base hover:text-brand'
+            className={`inline-flex h-7 items-center justify-center rounded-md px-2 text-sm font-semibold transition-colors ${
+              selected ? 'bg-white text-brand' : 'bg-transparent text-neutral-base hover:text-brand'
             }`}
           >
             {tab.label}

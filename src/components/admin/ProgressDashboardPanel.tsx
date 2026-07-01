@@ -5,6 +5,7 @@ import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { Modal } from '@/components/common/Modal';
 import { Toggle } from '@/components/common/Toggle';
 import { StatBox } from '@/components/common/StatBox';
+import { StatCardSection } from '@/components/common/StatCardSection';
 import { TimeGridSheet } from '@/components/admin/TimeGridSheet';
 import { ReplaceNoShowModal } from '@/components/admin/ReplaceNoShowModal';
 import { CompanyPhotoUploadPanel } from '@/components/staff/CompanyPhotoUploadPanel';
@@ -15,12 +16,12 @@ import {
   useSetSessionStatus,
   useReplaceNoShow,
 } from '@/hooks/useEventDashboard';
-import { useSetTableManager } from '@/hooks/useEventDetailMutations';
 import { useEventOperators } from '@/hooks/useOperators';
 import { useEventCompanyPhotos } from '@/hooks/useCompanyPhotos';
 import { computeProgressStats } from '@/lib/booking';
 import { participantLabel, SESSION_STATUS_TONE } from '@/lib/labels';
 import { Badge } from '@/components/common/Badge';
+import { DotTag } from '@/components/common/Tag';
 import type { Tone } from '@/lib/tone';
 import type {
   AssignableUser,
@@ -37,8 +38,6 @@ interface ProgressDashboardPanelProps {
   userById: Map<string, AssignableUser>;
   timezone: string;
   locked: boolean;
-  /** 테이블 담당자 지정 권한(OWNER/MANAGER). 1열 담당자 셀렉트 편집 가능 여부. */
-  canManage: boolean;
 }
 
 /**
@@ -53,7 +52,6 @@ export function ProgressDashboardPanel({
   userById,
   timezone,
   locked,
-  canManage,
 }: ProgressDashboardPanelProps) {
   const slotsQ = useEventSlots(eventId, { refetchInterval: DASHBOARD_POLL_MS });
   const slots = useMemo(() => slotsQ.data ?? [], [slotsQ.data]);
@@ -66,12 +64,10 @@ export function ProgressDashboardPanel({
   const replaceNoShow = useReplaceNoShow(eventId);
   const [replaceTarget, setReplaceTarget] = useState<MatchingSlotRow | null>(null);
 
-  // 테이블 현장 담당자(1열 하단 셀렉트) — 후보 = 행사 배정 오퍼레이터(STAFF+).
-  const setTableManager = useSetTableManager(eventId);
+  // 테이블 현장 담당자 — 진행 현황에서는 이름만 표시(배정은 테이블 설정). 이름 해석용 오퍼레이터.
   const operatorsQ = useEventOperators(eventId);
   const managerOptions = useMemo(
-    () =>
-      (operatorsQ.data ?? []).map((o) => ({ userId: o.user_id, name: o.operator_name })),
+    () => (operatorsQ.data ?? []).map((o) => ({ userId: o.user_id, name: o.operator_name })),
     [operatorsQ.data],
   );
   const managerByTable = useMemo(
@@ -150,9 +146,7 @@ export function ProgressDashboardPanel({
   const pending = noShow.isPending || setSessionStatus.isPending;
   const actionError = setSessionStatus.isError
     ? (setSessionStatus.error as Error).message
-    : setTableManager.isError
-      ? (setTableManager.error as Error).message
-      : null;
+    : null;
 
   const noShowStartup = noShowTarget?.startup_id
     ? userById.get(noShowTarget.startup_id)
@@ -160,30 +154,29 @@ export function ProgressDashboardPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="flex flex-col gap-4 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-bold text-neutral-base">실시간 진행 현황</h2>
+      <StatCardSection
+        title="실시간 진행 현황"
+        description="행사 진행 중 세션의 출석·진행·완료 상태를 실시간으로 집계합니다."
+        actions={
           <div className="flex items-center gap-2 text-xs font-semibold text-neutral-base">
-            <span className="flex items-center gap-1.5 rounded-full bg-danger-surface px-2.5 py-1 text-[11px] font-bold text-danger border border-danger-border">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-danger" />
+            <DotTag
+              dotClassName="animate-pulse bg-danger"
+              className="h-auto rounded-full border-danger-border bg-danger-surface py-1 text-[11px] font-bold text-danger"
+            >
               LIVE
-            </span>
+            </DotTag>
             <span>{formatTime(timeLeft)} 후 자동 갱신</span>
           </div>
-        </div>
-
+        }
+      >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <StatBox label="총 진행 세션" value={progress.total} />
           <StatBox label="대기중 세션" value={progress.waiting} />
-          <StatBox label="진행중 세션" value={progress.inProgress} tone="info" />
-          <StatBox label="완료 세션" value={progress.completed} tone="success" />
-          <StatBox
-            label="잔여 세션"
-            value={progress.remaining}
-            tone={progress.remaining > 0 ? 'warning' : 'success'}
-          />
+          <StatBox label="진행중 세션" value={progress.inProgress} />
+          <StatBox label="완료 세션" value={progress.completed} />
+          <StatBox label="잔여 세션" value={progress.remaining} />
         </div>
-      </Card>
+      </StatCardSection>
 
       <Card className="flex flex-col gap-4 p-5">
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
@@ -192,14 +185,12 @@ export function ProgressDashboardPanel({
           <Legend tone={SESSION_STATUS_TONE.COMPLETED} label="완료" />
           <Legend tone={SESSION_STATUS_TONE.NO_SHOW} label="노쇼" />
           <span className="ml-1 text-neutral-base/50">
-            · 셀 색은 진행 상태입니다. 각 셀에서 대기중/진행중/완료를 직접 전환하면 출석이 자동 처리되고(진행·완료=출석, 노쇼=불참), 노쇼는 사유 버튼으로, 전문가 상담일지는 별도로 제출됩니다. 셀 하단 📷 버튼으로 증빙사진을 바로 등록·검수합니다.
+            · 셀 색은 진행 상태입니다. 각 셀에서 대기중/진행중/완료를 직접 전환하면 출석이 자동
+            처리되고(진행·완료=출석, 노쇼=불참), 노쇼는 사유 버튼으로, 전문가 상담일지는 별도로
+            제출됩니다. 셀 하단 📷 버튼으로 증빙사진을 바로 등록·검수합니다.
           </span>
           <label className="ml-auto inline-flex items-center gap-2 text-neutral-base/70">
-            <Toggle
-              checked={photoFilter}
-              onChange={setPhotoFilter}
-              label="사진 미등록 셀만 보기"
-            />
+            <Toggle checked={photoFilter} onChange={setPhotoFilter} label="사진 미등록 셀만 보기" />
             <span className="font-semibold">📷 사진 미등록 셀만 보기</span>
           </label>
         </div>
@@ -227,11 +218,6 @@ export function ProgressDashboardPanel({
           onOpenPhotos={(slot) => slot.startup_id && setPhotoTarget(slot.startup_id)}
           operators={managerOptions}
           managerByTable={managerByTable}
-          onSetTableManager={(tableId, userId) =>
-            setTableManager.mutate({ tableId, userId })
-          }
-          canManage={canManage}
-          managerPending={setTableManager.isPending}
         />
       </Card>
 

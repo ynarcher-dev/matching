@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Alert } from '@/components/common/Alert';
 import { Badge } from '@/components/common/Badge';
-import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { PageToolbar } from '@/components/common/PageToolbar';
@@ -9,6 +8,7 @@ import { SearchInput } from '@/components/common/FilterBar';
 import { Toggle } from '@/components/common/Toggle';
 import { Pagination } from '@/components/common/Pagination';
 import { StatBox } from '@/components/common/StatBox';
+import { StatCardSection } from '@/components/common/StatCardSection';
 import { useDataTable } from '@/hooks/useDataTable';
 import { useCounselingReport } from '@/hooks/useCounselingReport';
 import { useSurveyReport, useExpertSurveyReport } from '@/hooks/useSurveyReport';
@@ -284,20 +284,17 @@ export function OperationsPanel({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* 요약 지표 — 전문가 만족도 결과(8-G)와 동일한 카드 + StatBox 그리드 레이아웃. */}
-      <Card className="flex flex-col gap-5 p-5">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-base font-bold text-neutral-base">운영 현황</h2>
-          <p className="text-sm text-neutral-base/70">
-            기업별 산출물(상담·일지·만족도·사진) 충족 현황과 최종 완료 여부를 집계합니다.
-          </p>
-        </div>
+      {/* 요약 지표 — 공통 StatCardSection 레이아웃(모든 행사 상세 탭 통일). */}
+      <StatCardSection
+        title="운영 현황"
+        description="기업별 산출물(상담·일지·만족도·사진) 충족 현황과 최종 완료 여부를 집계합니다."
+      >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatBox label="전체 기업" value={summary.total} hint="개사" />
-          <StatBox label="완료" value={summary.complete} hint="개사" tone="success" />
-          <StatBox label="미완료" value={summary.incomplete} hint="개사" tone="warning" />
+          <StatBox label="완료" value={summary.complete} hint="개사" />
+          <StatBox label="미완료" value={summary.incomplete} hint="개사" />
         </div>
-      </Card>
+      </StatCardSection>
 
       {anyError && (
         <Alert tone="error">운영 현황을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>

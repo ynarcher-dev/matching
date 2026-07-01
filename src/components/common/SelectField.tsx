@@ -30,7 +30,7 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(funct
       <select
         ref={ref}
         id={selectId}
-        className={`w-full rounded-lg border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 ${borderClass} ${className}`}
+        className={`h-9 w-full rounded-lg border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 ${borderClass} ${className}`}
         {...rest}
       >
         {options.map((o) => (

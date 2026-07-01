@@ -71,9 +71,12 @@ export function ForceBookingModal({
     }
   }, [open, initialSlotId, initialStartupId, slots]);
 
-  const tableCodeById = useMemo(
-    () => new Map(tables.map((t) => [t.id, t.table_code])),
-    [tables],
+  const tableCodeById = useMemo(() => new Map(tables.map((t) => [t.id, t.table_code])), [tables]);
+
+  // 배정할 스타트업 셀렉트 — 표시 라벨(기업명 · 대표명) 이름순.
+  const sortedStartups = useMemo(
+    () => [...startups].sort((a, b) => participantLabel(a).localeCompare(participantLabel(b), 'ko')),
+    [startups],
   );
 
   // 비어 있는(배정 가능) 슬롯 — 시작시각 → 전문가명 순.
@@ -136,7 +139,7 @@ export function ForceBookingModal({
   };
 
   const fieldClass = (invalid: boolean) =>
-    `w-full rounded-lg border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:bg-surface/60 ${
+    `h-9 w-full rounded-lg border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:bg-surface/60 ${
       touched && invalid ? 'border-brand' : 'border-border'
     }`;
 
@@ -172,7 +175,7 @@ export function ForceBookingModal({
             className={fieldClass(startupInvalid)}
           >
             <option value="">스타트업을 선택하세요</option>
-            {startups.map((u) => (
+            {sortedStartups.map((u) => (
               <option key={u.id} value={u.id}>
                 {participantLabel(u)}
               </option>
@@ -224,9 +227,7 @@ export function ForceBookingModal({
             onChange={(e) => setSlotId(e.target.value)}
             className={fieldClass(slotInvalid)}
           >
-            <option value="">
-              {expertId ? '시간을 선택하세요' : '먼저 전문가를 선택하세요'}
-            </option>
+            <option value="">{expertId ? '시간을 선택하세요' : '먼저 전문가를 선택하세요'}</option>
             {timeSlots.map((s) => {
               const conflict = conflicts.has(s.id);
               const table = s.table_id ? tableCodeById.get(s.table_id) : null;

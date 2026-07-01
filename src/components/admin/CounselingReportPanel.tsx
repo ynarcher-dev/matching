@@ -2,12 +2,13 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/common/Badge';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
-import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { Spinner } from '@/components/common/Spinner';
 import { Modal } from '@/components/common/Modal';
 import { FilterBar, SearchInput, FilterChips } from '@/components/common/FilterBar';
 import { Pagination } from '@/components/common/Pagination';
 import { StatBox } from '@/components/common/StatBox';
+import { StatCardSection } from '@/components/common/StatCardSection';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useEventCounselingQuestions } from '@/hooks/useCounselingBuilder';
 import { useCounselingReport, type ReportCounselingLog } from '@/hooks/useCounselingReport';
@@ -205,27 +206,21 @@ export function CounselingReportPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 통계 카드 섹션 — 제목 + 작성 현황(예약/진행 관리와 동일한 StatBox 레이아웃) */}
-      <Card className="flex flex-col gap-5 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-base font-bold text-neutral-base">상담일지 결과</h2>
-            <p className="text-sm text-neutral-base/70">
-              전문가가 작성한 상담일지를 집계합니다. CSV 로 내려받아 외부 보고에 활용할 수 있습니다.
-            </p>
-          </div>
+      {/* 통계 카드 섹션 — 제목 + 작성 현황(공통 StatCardSection 레이아웃) */}
+      <StatCardSection
+        title="상담일지 결과"
+        description="전문가가 작성한 상담일지를 집계합니다. CSV 로 내려받아 외부 보고에 활용할 수 있습니다."
+        actions={
           <div className="flex flex-wrap items-center gap-2">
             {onOpenSettings && (
-              <Button variant="outline" onClick={onOpenSettings}>
-                상담일지 설정
-              </Button>
+              <SectionActionButton onClick={onOpenSettings}>상담일지 설정</SectionActionButton>
             )}
-            <Button variant="outline" onClick={handleExport} disabled={logs.length === 0}>
+            <SectionActionButton onClick={handleExport} disabled={logs.length === 0}>
               CSV 내보내기
-            </Button>
+            </SectionActionButton>
           </div>
-        </div>
-
+        }
+      >
         {(questionsQ.isError || reportQ.isError) && (
           <Alert tone="error">결과를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
         )}
@@ -245,23 +240,13 @@ export function CounselingReportPanel({
           <StatBox
             label="기업 작성률"
             value={`${stats.totalCompanies > 0 ? Math.round((stats.completedCompanies / stats.totalCompanies) * 100) : 0}%`}
-            tone={
-              stats.totalCompanies > 0 && stats.completedCompanies === stats.totalCompanies
-                ? 'success'
-                : 'default'
-            }
           />
           <StatBox
             label="세션 작성률"
             value={`${stats.totalSessions > 0 ? Math.round((stats.completedSessions / stats.totalSessions) * 100) : 0}%`}
-            tone={
-              stats.totalSessions > 0 && stats.completedSessions === stats.totalSessions
-                ? 'success'
-                : 'default'
-            }
           />
         </div>
-      </Card>
+      </StatCardSection>
 
       {/* 상담일지 목록 — 기업명 그룹 + 세션 하위행(8-J 검색·필터, 기업 단위 페이지네이션) */}
       <Card className="flex flex-col gap-4 p-5">

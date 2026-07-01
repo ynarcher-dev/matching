@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/common/Badge';
+import { CompactTagButton } from '@/components/common/Tag';
 import { buildBookingSchedule } from '@/lib/booking';
 import { formatDateTime } from '@/lib/datetime';
-import { BADGE_TONE, type Tone } from '@/lib/tone';
-import {
-  companyName,
-  SESSION_STATUS_LABELS,
-  SESSION_STATUS_TONE,
-} from '@/lib/labels';
+import type { Tone } from '@/lib/tone';
+import { companyName, SESSION_STATUS_LABELS, SESSION_STATUS_TONE } from '@/lib/labels';
 import type {
   AssignableUser,
   EventParticipantRow,
@@ -28,7 +25,10 @@ interface TimeGridSheetProps {
   /** 노쇼 처리(사유 모달 오픈). */
   onMarkNoShow: (slot: MatchingSlotRow) => void;
   /** 진행 상태 직접 설정(대기중/진행중/완료, 관리/스태프). 출석은 상태 전환에 따라 자동 동기화된다. */
-  onSetSessionStatus: (slot: MatchingSlotRow, status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED') => void;
+  onSetSessionStatus: (
+    slot: MatchingSlotRow,
+    status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED',
+  ) => void;
   /** 노쇼 슬롯에 현장 대기 스타트업 대체 매칭(모달 오픈, ideation §2). */
   onReplaceNoShow: (slot: MatchingSlotRow) => void;
   /** 스타트업(company_user_id)별 등록된 증빙사진 수 — 셀 📷 배지/필터 (ideation §3). */
@@ -37,16 +37,10 @@ interface TimeGridSheetProps {
   photoFilter: boolean;
   /** 셀 📷 버튼 클릭 → 해당 스타트업 증빙사진 업로드/검수 모달 오픈. */
   onOpenPhotos: (slot: MatchingSlotRow) => void;
-  /** 테이블 담당자 후보 = 행사 배정 오퍼레이터(STAFF+). 1열 하단 담당자 셀렉트에 나열. */
+  /** 담당자 이름 해석용 오퍼레이터 목록(user_id → 이름). 배정은 테이블 설정에서 한다. */
   operators: TableManagerOption[];
-  /** table_id → 현재 담당자 user_id(없으면 null). 1열 담당자 표시/셀렉트 값. */
+  /** table_id → 현재 담당자 user_id(없으면 null). 1열 담당자 이름 표시용(읽기전용). */
   managerByTable: Map<string, string | null>;
-  /** 담당자 지정/해제(can_manage_event). userId=null 이면 해제. */
-  onSetTableManager: (tableId: string, userId: string | null) => void;
-  /** 담당자 지정 권한(OWNER/MANAGER). false 면 1열에 읽기전용 칩만 표시. */
-  canManage: boolean;
-  /** 담당자 mutation 진행 중 — 셀렉트 비활성. */
-  managerPending: boolean;
 }
 
 /** 1열 담당자 셀렉트 옵션(행사 배정 오퍼레이터). */
@@ -98,9 +92,6 @@ export function TimeGridSheet({
   onOpenPhotos,
   operators,
   managerByTable,
-  onSetTableManager,
-  canManage,
-  managerPending,
 }: TimeGridSheetProps) {
   const { columns, byExpert } = useMemo(() => buildBookingSchedule(slots), [slots]);
 
@@ -131,10 +122,7 @@ export function TimeGridSheet({
     return null;
   }, [columns, endByStart, now]);
 
-  const tableCodeById = useMemo(
-    () => new Map(tables.map((t) => [t.id, t.table_code])),
-    [tables],
-  );
+  const tableCodeById = useMemo(() => new Map(tables.map((t) => [t.id, t.table_code])), [tables]);
   const defaultTableByExpert = useMemo(
     () => new Map(participants.map((p) => [p.user_id, p.default_table_id])),
     [participants],
@@ -153,8 +141,7 @@ export function TimeGridSheet({
       };
     });
     return rows.sort(
-      (a, b) =>
-        a.tableCode.localeCompare(b.tableCode, 'ko') || a.name.localeCompare(b.name, 'ko'),
+      (a, b) => a.tableCode.localeCompare(b.tableCode, 'ko') || a.name.localeCompare(b.name, 'ko'),
     );
   }, [byExpert, userById, defaultTableByExpert, tableCodeById]);
 
@@ -172,98 +159,97 @@ export function TimeGridSheet({
       {/* 안쪽: 실제 가로·세로 스크롤 담당. */}
       <div className="max-h-[calc(100vh-220px)] overflow-auto">
         <table className="border-collapse text-left text-sm">
-        <thead>
-          <tr className="sticky top-0 z-20 border-b-2 border-border bg-surface text-neutral-base">
-            <th className="sticky left-0 z-30 w-44 min-w-44 whitespace-nowrap border-r border-border bg-surface px-3 py-2.5 font-bold">
-              테이블 · 전문가
-            </th>
-            {columns.map((c) => {
-              const end = endByStart.get(c);
-              const isCurrent = c === currentColumn;
-              return (
-                <th
-                  key={c}
-                  className={`w-[150px] min-w-[150px] whitespace-nowrap bg-surface px-1 py-2 text-center font-bold ${
-                    isCurrent
-                      ? 'border-x-2 border-t-2 border-brand'
-                      : 'border-r border-border last:border-r-0'
-                  }`}
-                >
-                  <span className="block text-sm text-neutral-base">
-                    {formatDateTime(c, timezone).slice(-5)}
-                  </span>
-                  {end && (
-                    <span className="block text-xs font-medium text-neutral-base/55">
-                      ~{formatDateTime(end, timezone).slice(-5)}
+          <thead>
+            <tr className="sticky top-0 z-20 border-b-2 border-border bg-surface text-neutral-base">
+              <th className="sticky left-0 z-30 w-44 min-w-44 whitespace-nowrap border-r border-border bg-surface px-3 py-2.5 font-bold">
+                테이블 · 전문가
+              </th>
+              {columns.map((c) => {
+                const end = endByStart.get(c);
+                const isCurrent = c === currentColumn;
+                return (
+                  <th
+                    key={c}
+                    className={`w-[150px] min-w-[150px] whitespace-nowrap bg-surface px-1 py-2 text-center font-bold ${
+                      isCurrent
+                        ? 'border-x-2 border-t-2 border-brand'
+                        : 'border-r border-border last:border-r-0'
+                    }`}
+                  >
+                    <span className="block text-sm text-neutral-base">
+                      {formatDateTime(c, timezone).slice(-5)}
                     </span>
-                  )}
-                </th>
+                    {end && (
+                      <span className="block text-xs font-medium text-neutral-base/55">
+                        ~{formatDateTime(end, timezone).slice(-5)}
+                      </span>
+                    )}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {expertRows.map((row, rowIdx) => {
+              const cells = byExpert.get(row.expertId);
+              const isLastRow = rowIdx === expertRows.length - 1;
+              return (
+                <tr key={row.expertId} className="border-b border-border last:border-b-0">
+                  <th className="sticky left-0 z-10 w-44 min-w-44 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle">
+                    <span className="inline-block rounded bg-neutral-base px-2 py-0.5 text-xs font-bold text-white">
+                      {row.tableCode}
+                    </span>
+                    <span className="mt-1 block text-sm font-bold text-neutral-base">
+                      {row.name}
+                    </span>
+                    {row.org && (
+                      <span className="block text-xs font-medium text-neutral-base/70">
+                        {row.org}
+                      </span>
+                    )}
+                    {/* 테이블 현장 담당자(오퍼레이터) — 1열 하단 읽기전용 표시. 배정은 테이블 설정에서. */}
+                    <TableManagerField
+                      tableId={row.tableId}
+                      managerId={row.tableId ? (managerByTable.get(row.tableId) ?? null) : null}
+                      operators={operators}
+                    />
+                  </th>
+                  {columns.map((c) => {
+                    const slot = cells?.get(c);
+                    // 빈 칸/빈 슬롯은 셀 세로 가운데 정렬, 예약된 칸은 위 정렬.
+                    const isEmpty = !slot || !slot.startup_id;
+                    const isCurrent = c === currentColumn;
+                    return (
+                      <td
+                        key={c}
+                        className={`w-[150px] min-w-[150px] p-1 ${
+                          isEmpty ? 'align-middle' : 'align-top'
+                        } ${
+                          isCurrent
+                            ? `border-x-2 border-brand ${isLastRow ? 'border-b-2' : ''}`
+                            : 'border-r border-border last:border-r-0'
+                        }`}
+                      >
+                        <GridCell
+                          slot={slot}
+                          userById={userById}
+                          locked={locked}
+                          pending={pending}
+                          photoCount={
+                            slot?.startup_id ? (photoCountByStartup.get(slot.startup_id) ?? 0) : 0
+                          }
+                          photoFilter={photoFilter}
+                          onMarkNoShow={onMarkNoShow}
+                          onSetSessionStatus={onSetSessionStatus}
+                          onReplaceNoShow={onReplaceNoShow}
+                          onOpenPhotos={onOpenPhotos}
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
               );
             })}
-          </tr>
-        </thead>
-        <tbody>
-          {expertRows.map((row, rowIdx) => {
-            const cells = byExpert.get(row.expertId);
-            const isLastRow = rowIdx === expertRows.length - 1;
-            return (
-              <tr key={row.expertId} className="border-b border-border last:border-b-0">
-                <th className="sticky left-0 z-10 w-44 min-w-44 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle">
-                  <span className="inline-block rounded bg-neutral-base px-2 py-0.5 text-xs font-bold text-white">
-                    {row.tableCode}
-                  </span>
-                  <span className="mt-1 block text-sm font-bold text-neutral-base">
-                    {row.name}
-                  </span>
-                  {row.org && (
-                    <span className="block text-xs font-medium text-neutral-base/70">
-                      {row.org}
-                    </span>
-                  )}
-                  {/* 테이블 현장 담당자(오퍼레이터) — 1열 하단 입력 영역. 담당 전문가와 별개. */}
-                  <TableManagerField
-                    tableId={row.tableId}
-                    managerId={row.tableId ? (managerByTable.get(row.tableId) ?? null) : null}
-                    operators={operators}
-                    canManage={canManage}
-                    disabled={locked || managerPending}
-                    onSetManager={onSetTableManager}
-                  />
-                </th>
-                {columns.map((c) => {
-                  const slot = cells?.get(c);
-                  // 빈 칸/빈 슬롯은 셀 세로 가운데 정렬, 예약된 칸은 위 정렬.
-                  const isEmpty = !slot || !slot.startup_id;
-                  const isCurrent = c === currentColumn;
-                  return (
-                    <td
-                      key={c}
-                      className={`w-[150px] min-w-[150px] p-1 ${
-                        isEmpty ? 'align-middle' : 'align-top'
-                      } ${
-                        isCurrent
-                          ? `border-x-2 border-brand ${isLastRow ? 'border-b-2' : ''}`
-                          : 'border-r border-border last:border-r-0'
-                      }`}
-                    >
-                      <GridCell
-                        slot={slot}
-                        userById={userById}
-                        locked={locked}
-                        pending={pending}
-                        photoCount={slot?.startup_id ? (photoCountByStartup.get(slot.startup_id) ?? 0) : 0}
-                        photoFilter={photoFilter}
-                        onMarkNoShow={onMarkNoShow}
-                        onSetSessionStatus={onSetSessionStatus}
-                        onReplaceNoShow={onReplaceNoShow}
-                        onOpenPhotos={onOpenPhotos}
-                      />
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
           </tbody>
         </table>
       </div>
@@ -272,30 +258,20 @@ export function TimeGridSheet({
 }
 
 /**
- * 1열(테이블·전문가) 하단 현장 담당자 영역.
- * - 테이블 미지정(전문가에 기본 테이블 없음): 배정 불가 안내.
- * - canManage: 오퍼레이터 셀렉트로 지정/해제(set_table_manager).
- * - 그 외: 읽기전용 칩으로 현재 담당자만 표시.
+ * 1열(테이블·전문가) 하단 현장 담당자 읽기전용 표시.
+ * 담당자 배정은 테이블 설정(EventTablesPanel)에서 하고, 진행 현황에서는 이름만 보여준다.
+ * - 테이블 미지정(전문가에 기본 테이블 없음): 안내 문구.
+ * - 그 외: 현재 담당자 이름(미지정이면 '미지정').
  */
 function TableManagerField({
   tableId,
   managerId,
   operators,
-  canManage,
-  disabled,
-  onSetManager,
 }: {
   tableId: string | null;
   managerId: string | null;
   operators: TableManagerOption[];
-  canManage: boolean;
-  disabled: boolean;
-  onSetManager: (tableId: string, userId: string | null) => void;
 }) {
-  const managerName = managerId
-    ? (operators.find((o) => o.userId === managerId)?.name ?? '(배정 외 담당자)')
-    : null;
-
   if (!tableId) {
     return (
       <p className="mt-3 border-t border-border pt-3 text-left text-xs font-medium text-neutral-base/40">
@@ -304,33 +280,15 @@ function TableManagerField({
     );
   }
 
-  if (!canManage) {
-    return (
-      <div className="mt-3 border-t border-border pt-3 text-left">
-        <span className="mb-0.5 block text-xs font-semibold text-neutral-base/55">현장 담당자</span>
-        <span className="block text-sm font-bold text-neutral-base/80">{managerName ?? '미지정'}</span>
-      </div>
-    );
-  }
+  const managerName = managerId
+    ? (operators.find((o) => o.userId === managerId)?.name ?? '(배정 외 담당자)')
+    : null;
 
   return (
-    <label className="mt-3 block border-t border-border pt-3 text-left">
-      <span className="mb-1 block text-xs font-semibold text-neutral-base/55">현장 담당자</span>
-      <select
-        value={managerId ?? ''}
-        disabled={disabled}
-        onChange={(e) => onSetManager(tableId, e.target.value || null)}
-        aria-label="테이블 현장 담당자"
-        className="w-full rounded-md border border-border bg-surface-raised px-2 py-1.5 text-sm font-medium text-neutral-base outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50"
-      >
-        <option value="">미지정</option>
-        {operators.map((o) => (
-          <option key={o.userId} value={o.userId}>
-            {o.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="mt-3 border-t border-border pt-3 text-left">
+      <span className="mb-0.5 block text-xs font-semibold text-neutral-base/55">현장 담당자</span>
+      <span className="block text-sm font-bold text-neutral-base/80">{managerName ?? '미지정'}</span>
+    </div>
   );
 }
 
@@ -354,19 +312,26 @@ function GridCell({
   photoCount: number;
   photoFilter: boolean;
   onMarkNoShow: (slot: MatchingSlotRow) => void;
-  onSetSessionStatus: (slot: MatchingSlotRow, status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED') => void;
+  onSetSessionStatus: (
+    slot: MatchingSlotRow,
+    status: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED',
+  ) => void;
   onReplaceNoShow: (slot: MatchingSlotRow) => void;
   onOpenPhotos: (slot: MatchingSlotRow) => void;
 }) {
   // 사진 필터 켜짐: 사진과 무관한 칸(빈 칸/빈 슬롯)은 흐리게 처리해 미등록 셀을 부각한다.
   if (!slot) {
     return (
-      <span className={`block text-center text-neutral-base/15 ${photoFilter ? 'opacity-25' : ''}`}>·</span>
+      <span className={`block text-center text-neutral-base/15 ${photoFilter ? 'opacity-25' : ''}`}>
+        ·
+      </span>
     );
   }
   if (!slot.startup_id) {
     return (
-      <span className={`block text-center text-xs text-neutral-base/35 ${photoFilter ? 'opacity-25' : ''}`}>
+      <span
+        className={`block text-center text-xs text-neutral-base/35 ${photoFilter ? 'opacity-25' : ''}`}
+      >
         빈 슬롯
       </span>
     );
@@ -401,14 +366,10 @@ function GridCell({
           {startup ? companyName(startup) : '(알 수 없음)'}
         </p>
         {startup?.representative_name && (
-          <p className="break-keep text-xs text-neutral-base">
-            {startup.representative_name}
-          </p>
+          <p className="break-keep text-xs text-neutral-base">{startup.representative_name}</p>
         )}
         {startup?.phone_number && (
-          <p className="break-keep text-[11px] text-neutral-base/70">
-            {startup.phone_number}
-          </p>
+          <p className="break-keep text-[11px] text-neutral-base/70">{startup.phone_number}</p>
         )}
       </div>
 
@@ -448,14 +409,15 @@ function GridCell({
 
       {/* 노쇼 현장 대체 매칭(ideation §2): 노쇼 슬롯을 재사용해 현장 대기 스타트업을 새로 배정. */}
       {status === 'NO_SHOW' && (
-        <button
+        <CompactTagButton
+          tone="danger"
           type="button"
           disabled={locked || pending}
           onClick={() => onReplaceNoShow(slot)}
-          className={`rounded-md border px-1 py-1 text-[10px] font-bold transition-colors hover:brightness-95 disabled:opacity-50 ${BADGE_TONE.danger}`}
+          className="hover:brightness-95 disabled:opacity-50"
         >
           현장 대체 매칭
-        </button>
+        </CompactTagButton>
       )}
 
       {/* 증빙사진 통합(ideation §3): 셀에서 바로 업로드/검수 모달을 연다. 사진은 (행사×스타트업) 단위.
@@ -471,19 +433,16 @@ function GridCell({
 function PhotoCellButton({ count, onClick }: { count: number; onClick: () => void }) {
   const has = count > 0;
   return (
-    <button
+    <CompactTagButton
       type="button"
       onClick={onClick}
       aria-label={has ? `증빙사진 ${count}장 보기` : '증빙사진 등록'}
-      className={`flex items-center justify-center gap-1 rounded-md border px-1 py-1 text-[10px] font-bold transition-colors ${
-        has
-          ? 'border-success-border bg-success-surface text-success hover:brightness-95'
-          : 'border-dashed border-border bg-surface-raised text-neutral-base/55 hover:bg-surface'
-      }`}
+      tone={has ? 'success' : 'muted'}
+      className={`gap-1 ${has ? 'hover:brightness-95' : 'border-dashed text-neutral-base/55'}`}
     >
       <CameraIcon />
       <span>{has ? `${count}장` : '사진 등록'}</span>
-    </button>
+    </CompactTagButton>
   );
 }
 
@@ -517,19 +476,14 @@ function StatusButton({
   onClick: () => void;
 }) {
   return (
-    <button
+    <CompactTagButton
       type="button"
-      aria-pressed={active}
+      active={active}
+      tone={tone}
       disabled={disabled || active}
       onClick={onClick}
-      className={`rounded-md border px-1 py-1 text-[10px] font-bold transition-colors disabled:cursor-default ${
-        active
-          ? `${BADGE_TONE[tone]} ring-1 ring-inset ring-current`
-          : 'border-border bg-surface-raised text-neutral-base/70 hover:bg-surface disabled:opacity-50'
-      }`}
     >
       {label}
-    </button>
+    </CompactTagButton>
   );
 }
-

@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
-import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { Alert } from '@/components/common/Alert';
 import { FullScreenLoader } from '@/components/common/FullScreenLoader';
 import { DataTable } from '@/components/common/DataTable';
 import { FilterBar, SearchInput, FilterChips } from '@/components/common/FilterBar';
 import { Pagination } from '@/components/common/Pagination';
 import { useDataTable } from '@/hooks/useDataTable';
-import { buildEventColumns, eventSearchText, eventSortValues } from '@/components/admin/eventColumns';
+import {
+  buildEventColumns,
+  eventSearchText,
+  eventSortValues,
+} from '@/components/admin/eventColumns';
 import { EventFormModal } from '@/components/admin/EventFormModal';
 import { CancelEventModal } from '@/components/admin/CancelEventModal';
 import { useEvents } from '@/hooks/useEvents';
@@ -83,11 +87,17 @@ export function EventListView() {
         <h1 className="text-2xl font-bold text-neutral-base">행사 운영 관리</h1>
         <div className="flex items-center gap-2">
           {/* 행사 개설은 최고관리자만(events INSERT RLS = is_super_admin). */}
-          {isSuperAdmin && <Button onClick={openCreate}>+ 새 행사 개설</Button>}
+          {isSuperAdmin && (
+            <SectionActionButton tone="primary" onClick={openCreate}>
+              + 새 행사 개설
+            </SectionActionButton>
+          )}
         </div>
       </header>
 
-      {isError && <Alert tone="error">행사 목록을 불러오지 못했습니다. {(error as Error).message}</Alert>}
+      {isError && (
+        <Alert tone="error">행사 목록을 불러오지 못했습니다. {(error as Error).message}</Alert>
+      )}
 
       <div className="flex flex-col gap-3">
         <FilterBar>

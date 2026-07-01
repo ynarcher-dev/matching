@@ -64,3 +64,30 @@ export const cancelEventSchema = z.object({
 });
 
 export type CancelEventValues = z.infer<typeof cancelEventSchema>;
+
+/**
+ * 수동 상태 변경(override) 대상 상태 — 취소(CANCELLED)는 전용 취소 흐름을 쓰므로 제외한다.
+ * 자동 전환과 동일한 전진 순서를 그대로 나열해 셀렉트 표기 순서로 재사용한다.
+ */
+export const MANUAL_STATUSES = [
+  'DRAFT',
+  'BOOKING',
+  'ALLOCATION',
+  'PROGRESS',
+  'FINISHED',
+] as const;
+
+/**
+ * 행사 상태 수동 변경 폼 — 최고 관리자 전용(override_event_status RPC, 사유·감사 로그 필수).
+ * 취소로의 전환은 여기서 다루지 않는다(cancelEventSchema).
+ */
+export const statusOverrideSchema = z.object({
+  status: z.enum(MANUAL_STATUSES),
+  reason: z
+    .string()
+    .trim()
+    .min(1, '변경 사유를 입력해 주세요.')
+    .max(500, '사유는 500자 이하여야 합니다.'),
+});
+
+export type StatusOverrideValues = z.infer<typeof statusOverrideSchema>;

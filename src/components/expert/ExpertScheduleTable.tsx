@@ -1,5 +1,5 @@
 import { Badge } from '@/components/common/Badge';
-import { Button } from '@/components/common/Button';
+import { TableActionButton } from '@/components/common/ActionButton';
 import { DataTable } from '@/components/common/DataTable';
 import { SessionStatusBadge } from '@/components/expert/SessionStatusBadge';
 import { attendanceStatusFor } from '@/lib/attendance';
@@ -98,7 +98,10 @@ export function ExpertScheduleTable({
         if (!s.startup_id) return <span className="text-neutral-base/30">-</span>;
         return (
           <span className="inline-flex gap-1">
-            <AttendanceChip label="전" present={attendanceStatusFor(attendanceMap, s.id, s.expert_id)} />
+            <AttendanceChip
+              label="전"
+              present={attendanceStatusFor(attendanceMap, s.id, s.expert_id)}
+            />
             <AttendanceChip
               label="스"
               present={attendanceStatusFor(attendanceMap, s.id, s.startup_id)}
@@ -116,16 +119,15 @@ export function ExpertScheduleTable({
         if (!s.startup_id || !onOpen) return <span className="text-neutral-base/30">-</span>;
         const completed = s.session_status === 'COMPLETED';
         return (
-          <Button
-            variant={completed ? 'outline' : 'primary'}
-            size="sm"
+          <TableActionButton
+            tone={completed ? 'outline' : 'primary'}
             onClick={(e) => {
               e.stopPropagation();
               onOpen(s);
             }}
           >
             {completed ? '일지 보기/수정' : '일지 작성'}
-          </Button>
+          </TableActionButton>
         );
       },
     },
@@ -146,7 +148,13 @@ export function ExpertScheduleTable({
 }
 
 /** 출석 상태 칩: 출석=초록, 불참=레드, 미정=회색. */
-function AttendanceChip({ label, present }: { label: string; present: 'PRESENT' | 'ABSENT' | null }) {
+function AttendanceChip({
+  label,
+  present,
+}: {
+  label: string;
+  present: 'PRESENT' | 'ABSENT' | null;
+}) {
   const tone = present === 'PRESENT' ? 'success' : present === 'ABSENT' ? 'danger' : 'muted';
   const mark = present === 'PRESENT' ? '✓' : present === 'ABSENT' ? '✕' : '–';
   return (

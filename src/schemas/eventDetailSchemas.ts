@@ -52,7 +52,19 @@ export const slotGenerationSchema = z.object({
     .int('정수로 입력해 주세요.')
     .min(1, '세션 횟수는 1회 이상이어야 합니다.')
     .max(50, '세션 횟수는 50회 이하여야 합니다.'),
-  replace_unbooked: z.boolean(),
+  // 식사(점심) 시간대: 시작 시각과 같은 날의 벽시계(HH:mm). 최대 3개까지 추가(add) 가능.
+  meals: z
+    .array(
+      z
+        .object({
+          start: z.string().trim().min(1, '시작 시각을 입력해 주세요.'),
+          end: z.string().trim().min(1, '종료 시각을 입력해 주세요.'),
+        })
+        // HH:mm 은 문자열 비교로 시각 대소 판정 가능.
+        .refine((m) => m.end > m.start, { message: '종료가 시작보다 늦어야 합니다.', path: ['end'] }),
+    )
+    .max(3, '식사 시간은 최대 3개까지 추가할 수 있습니다.')
+    .optional(),
 });
 
 export type SlotGenerationValues = z.infer<typeof slotGenerationSchema>;

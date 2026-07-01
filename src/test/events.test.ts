@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { eventFormSchema, cancelEventSchema } from '@/schemas/eventSchemas';
+import {
+  eventFormSchema,
+  cancelEventSchema,
+  statusOverrideSchema,
+  MANUAL_STATUSES,
+} from '@/schemas/eventSchemas';
 import { localInputToIso, isoToLocalInput, formatRange } from '@/lib/datetime';
 import { EVENT_STATUS_LABELS, SATISFACTION_POLICY_LABELS } from '@/lib/labels';
 
@@ -84,6 +89,26 @@ describe('cancelEventSchema', () => {
   it('사유가 있으면 통과, 비면 거부', () => {
     expect(cancelEventSchema.safeParse({ reason: '주최측 사정' }).success).toBe(true);
     expect(cancelEventSchema.safeParse({ reason: '   ' }).success).toBe(false);
+  });
+});
+
+describe('statusOverrideSchema', () => {
+  it('DRAFT~FINISHED + 사유면 통과', () => {
+    for (const status of MANUAL_STATUSES) {
+      expect(statusOverrideSchema.safeParse({ status, reason: '수동 조정' }).success).toBe(true);
+    }
+  });
+
+  it('취소(CANCELLED)는 수동 변경 대상이 아니라 거부', () => {
+    expect(statusOverrideSchema.safeParse({ status: 'CANCELLED', reason: '사유' }).success).toBe(
+      false,
+    );
+  });
+
+  it('사유가 비면 거부', () => {
+    expect(statusOverrideSchema.safeParse({ status: 'PROGRESS', reason: '   ' }).success).toBe(
+      false,
+    );
   });
 });
 

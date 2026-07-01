@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { FullScreenLoader } from '@/components/common/FullScreenLoader';
@@ -42,7 +42,9 @@ export function OperatorListView() {
   const [resetTarget, setResetTarget] = useState<Operator | null>(null);
   const [assignTarget, setAssignTarget] = useState<Operator | null>(null);
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('ALL');
-  const [secret, setSecret] = useState<{ result: OperatorSecretResult; email: string } | null>(null);
+  const [secret, setSecret] = useState<{ result: OperatorSecretResult; email: string } | null>(
+    null,
+  );
 
   const summary = useMemo(() => summarizeOperators(operators ?? []), [operators]);
 
@@ -88,7 +90,9 @@ export function OperatorListView() {
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-neutral-base">운영자 관리</h1>
-        <Button onClick={openCreate}>+ 운영자 추가</Button>
+        <SectionActionButton tone="primary" onClick={openCreate}>
+          + 운영자 추가
+        </SectionActionButton>
       </header>
 
       {isError && (
@@ -161,9 +165,7 @@ export function OperatorListView() {
         requireReason
         reasonLabel="사유"
         reasonPlaceholder={
-          toggleTarget?.active
-            ? '예: 담당자 변경으로 계정 비활성화'
-            : '예: 복귀로 계정 재활성화'
+          toggleTarget?.active ? '예: 담당자 변경으로 계정 비활성화' : '예: 복귀로 계정 재활성화'
         }
         loading={update.isPending}
         error={update.error ? (update.error as Error).message : null}

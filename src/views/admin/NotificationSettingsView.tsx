@@ -11,10 +11,7 @@ import {
 } from '@/hooks/useNotificationSettings';
 import { getDispatchMode } from '@/lib/notificationGate';
 import { globalNotificationSettingsSchema } from '@/schemas/notificationSettingsSchemas';
-import {
-  DISPATCH_MODE_LABELS,
-  NOTIFICATION_PROVIDER_LABELS,
-} from '@/lib/labels';
+import { DISPATCH_MODE_LABELS, NOTIFICATION_PROVIDER_LABELS } from '@/lib/labels';
 import type { GlobalNotificationSettingsInput } from '@/schemas/notificationSettingsSchemas';
 import { formatDateTime } from '@/lib/datetime';
 
@@ -25,7 +22,7 @@ import { formatDateTime } from '@/lib/datetime';
  */
 export function NotificationSettingsView() {
   const settingQ = useGlobalNotificationSettings();
-  const update   = useUpdateGlobalNotificationSettings();
+  const update = useUpdateGlobalNotificationSettings();
   const testSend = useTestNotification();
   const [testDest, setTestDest] = useState('');
 
@@ -57,12 +54,12 @@ export function NotificationSettingsView() {
   }, [settingQ.data, reset]);
 
   const globalSettings = settingQ.data ?? null;
-  const dispatchMode   = getDispatchMode(globalSettings);
-  const modeMeta       = DISPATCH_MODE_LABELS[dispatchMode];
+  const dispatchMode = getDispatchMode(globalSettings);
+  const modeMeta = DISPATCH_MODE_LABELS[dispatchMode];
 
-  const provider        = watch('provider');
+  const provider = watch('provider');
   const dispatchEnabled = watch('dispatch_enabled');
-  const tabEnabled      = watch('event_notification_tab_enabled');
+  const tabEnabled = watch('event_notification_tab_enabled');
 
   const onSubmit = async (values: GlobalNotificationSettingsInput) => {
     await update.mutateAsync(values);
@@ -74,8 +71,8 @@ export function NotificationSettingsView() {
       <div>
         <h1 className="text-xl font-bold text-neutral-base">알림 설정</h1>
         <p className="mt-1 text-sm text-neutral-base/60">
-          실제 외부 발송은 이 페이지에서 명시적으로 활성화한 경우에만 수행됩니다.
-          기본값은 항상 비활성(무료 운영)입니다.
+          실제 외부 발송은 이 페이지에서 명시적으로 활성화한 경우에만 수행됩니다. 기본값은 항상
+          비활성(무료 운영)입니다.
         </p>
       </div>
 
@@ -83,11 +80,14 @@ export function NotificationSettingsView() {
       <Card className="flex flex-col gap-3 p-5">
         <h2 className="text-base font-bold text-neutral-base">현재 발송 모드</h2>
         <div className="flex flex-wrap items-center gap-3">
-          <span className={`rounded-md border px-3 py-1.5 text-sm font-semibold ${modeMeta.className}`}>
+          <span
+            className={`rounded-md border px-3 py-1.5 text-sm font-semibold ${modeMeta.className}`}
+          >
             {modeMeta.label}
           </span>
           <span className="text-xs text-neutral-base/60">
-            {dispatchMode === 'FREE_OPERATION' && '외부 API를 호출하지 않습니다. 수동 안내와 1회용 로그인 링크를 사용합니다.'}
+            {dispatchMode === 'FREE_OPERATION' &&
+              '외부 API를 호출하지 않습니다. 수동 안내와 1회용 로그인 링크를 사용합니다.'}
             {dispatchMode === 'MOCK' && 'Mock 어댑터로 실제 발송 없이 로그만 기록합니다.'}
             {dispatchMode === 'LIVE' && '공급사 API로 실제 발송합니다. 비용이 발생합니다.'}
             {dispatchMode === 'INCOMPLETE' && 'Solapi가 선택됐지만 발신번호가 미설정 상태입니다.'}
@@ -95,9 +95,8 @@ export function NotificationSettingsView() {
         </div>
         {settingQ.data?.last_tested_at && (
           <p className="text-xs text-neutral-base/50">
-            마지막 테스트:{' '}
-            {formatDateTime(settingQ.data.last_tested_at, 'Asia/Seoul')}{' '}
-            — {settingQ.data.last_test_status === 'SUCCESS' ? '성공' : '실패'}
+            마지막 테스트: {formatDateTime(settingQ.data.last_tested_at, 'Asia/Seoul')} —{' '}
+            {settingQ.data.last_test_status === 'SUCCESS' ? '성공' : '실패'}
           </p>
         )}
       </Card>
@@ -106,15 +105,11 @@ export function NotificationSettingsView() {
       <Card className="flex flex-col gap-5 p-5">
         <h2 className="text-base font-bold text-neutral-base">발송 설정</h2>
 
-        {settingQ.isError && (
-          <Alert tone="error">설정을 불러오지 못했습니다.</Alert>
-        )}
+        {settingQ.isError && <Alert tone="error">설정을 불러오지 못했습니다.</Alert>}
         {update.isError && (
           <Alert tone="error">{(update.error as Error).message ?? '저장에 실패했습니다.'}</Alert>
         )}
-        {update.isSuccess && !isDirty && (
-          <Alert tone="info">저장되었습니다.</Alert>
-        )}
+        {update.isSuccess && !isDirty && <Alert tone="info">저장되었습니다.</Alert>}
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
           {/* 행사알림 탭 노출 (임시 전역 스위치) — 발송 로직과 무관한 UI 게이트. */}
@@ -150,8 +145,7 @@ export function NotificationSettingsView() {
                 className="size-4 accent-brand"
               />
               <span className="text-sm text-neutral-base">
-                실제 발송 활성화 (현재:{' '}
-                <strong>{dispatchEnabled ? 'ON' : 'OFF'}</strong>)
+                실제 발송 활성화 (현재: <strong>{dispatchEnabled ? 'ON' : 'OFF'}</strong>)
               </span>
             </label>
           </section>
@@ -188,16 +182,13 @@ export function NotificationSettingsView() {
                 type="text"
                 placeholder="01012345678"
                 {...register('sender_phone')}
-                className="rounded-lg border border-border px-3 py-2 text-sm focus:border-brand focus:outline-none"
+                className="h-9 rounded-lg border border-border px-3 text-sm focus:border-brand focus:outline-none"
               />
             </section>
           )}
 
           <div className="flex justify-end">
-            <Button
-              type="submit"
-              disabled={!isDirty || isSubmitting}
-            >
+            <Button type="submit" disabled={!isDirty || isSubmitting}>
               {isSubmitting ? '저장 중…' : '저장'}
             </Button>
           </div>
@@ -215,8 +206,8 @@ export function NotificationSettingsView() {
         {testSend.isError && (
           <Alert tone="error">{testSend.error.message ?? '테스트 발송에 실패했습니다.'}</Alert>
         )}
-        {testSend.data && (
-          testSend.data.ok ? (
+        {testSend.data &&
+          (testSend.data.ok ? (
             <Alert tone="info">
               테스트 발송 성공{testSend.data.provider ? ` (${testSend.data.provider})` : ''}.
             </Alert>
@@ -226,8 +217,7 @@ export function NotificationSettingsView() {
                 ? '공급사 설정이 불완전합니다(API 키/발신번호 미설정). Edge Function 환경변수를 확인하세요.'
                 : '테스트 발송에 실패했습니다.'}
             </Alert>
-          )
-        )}
+          ))}
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -240,7 +230,7 @@ export function NotificationSettingsView() {
               value={testDest}
               onChange={(e) => setTestDest(e.target.value)}
               placeholder="01012345678"
-              className="rounded-lg border border-border px-3 py-2 text-sm focus:border-brand focus:outline-none"
+              className="h-9 rounded-lg border border-border px-3 text-sm focus:border-brand focus:outline-none"
             />
           </div>
           <Button

@@ -3,18 +3,26 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Badge } from '@/components/common/Badge';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { Alert } from '@/components/common/Alert';
 import { Modal } from '@/components/common/Modal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { SelectBox } from '@/components/common/SelectBox';
+import { StatBox } from '@/components/common/StatBox';
+import { StatCardSection } from '@/components/common/StatCardSection';
 import { FilterBar, FilterChips, SearchInput } from '@/components/common/FilterBar';
 import { Pagination } from '@/components/common/Pagination';
 import { Tabs } from '@/components/common/Tabs';
 import { ParticipantDetailModal } from '@/components/admin/ParticipantDetailModal';
 import { EmergencyLinkModal } from '@/components/admin/EmergencyLinkModal';
 import { UserDetailModal, type EditableParticipant } from '@/components/admin/UserDetailModal';
-import { FileCell, FieldsCell, ProposalStatusCell, RowAction } from '@/components/admin/participantCells';
+import {
+  FileCell,
+  FieldsCell,
+  ProposalStatusCell,
+  RowAction,
+} from '@/components/admin/participantCells';
 import { formatDateTime } from '@/lib/datetime';
 import { useDataTable } from '@/hooks/useDataTable';
 import { useFields } from '@/hooks/useFields';
@@ -116,72 +124,99 @@ export function ParticipantAssignPanel({
   }, [participants]);
 
   const { data: fields } = useFields();
-  const fieldNameById = useMemo(
-    () => new Map((fields ?? []).map((f) => [f.id, f.name])),
-    [fields],
-  );
+  const fieldNameById = useMemo(() => new Map((fields ?? []).map((f) => [f.id, f.name])), [fields]);
 
-  const userById = useMemo(
-    () => new Map(assignableUsers.map((u) => [u.id, u])),
-    [assignableUsers],
-  );
+  const userById = useMemo(() => new Map(assignableUsers.map((u) => [u.id, u])), [assignableUsers]);
 
   const current = useMemo(
     () => participants.filter((p) => p.participant_type === role),
     [participants, role],
   );
-  const assignedIds = useMemo(
-    () => new Set(participants.map((p) => p.user_id)),
-    [participants],
-  );
+  const assignedIds = useMemo(() => new Set(participants.map((p) => p.user_id)), [participants]);
   const candidates = useMemo(
     () => assignableUsers.filter((u) => u.role === role && !assignedIds.has(u.id)),
     [assignableUsers, role, assignedIds],
   );
 
+  const isExpert = role === 'EXPERT';
+  const roleLabel = PARTICIPANT_ROLE_LABELS[role];
+
+  // 통계 카드 섹션(다른 탭과 동일한 StatCardSection 레이아웃) — 참가 규모 + 준비/로그인 현황.
+  const stats = useMemo(() => {
+    const total = current.length;
+    let loggedIn = 0;
+    let withProposal = 0;
+    let withFields = 0;
+    for (const p of current) {
+      const u = userById.get(p.user_id);
+      if (!u) continue;
+      if (u.last_login_at) loggedIn += 1;
+      if (u.proposal_file_url) withProposal += 1;
+      if ((u.field_ids?.length ?? 0) > 0) withFields += 1;
+    }
+    return { total, loggedIn, notLoggedIn: total - loggedIn, withProposal, withFields };
+  }, [current, userById]);
+  const unit = isExpert ? '명' : '개사';
+
   return (
-    <Card className="flex flex-col gap-4 p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-bold text-neutral-base">
-          {lockedRole ? `참가 ${PARTICIPANT_ROLE_LABELS[lockedRole]} 지정` : '참가자 지정'}
-        </h2>
-        {!lockedRole && (
-          <Tabs
-            value={role}
-            options={tabOptions}
-            onChange={setInnerRole}
-          />
-        )}
-      </div>
-
-      <CurrentList
-        eventId={eventId}
-        role={role}
-        participants={current}
-        userById={userById}
-        tables={tables}
-        locked={locked}
-        fieldNameById={fieldNameById}
-        onOpenDetail={setDetailTarget}
-        addSlot={
-          !locked ? (
-            <AddCandidates
-              eventId={eventId}
-              role={role}
-              candidates={candidates}
-              fieldNameById={fieldNameById}
-            />
-          ) : null
+    <div className="flex flex-col gap-4">
+      <StatCardSection
+        title={`참가 ${roleLabel} 현황`}
+        description={
+          isExpert
+            ? '행사에 지정된 전문가의 분야 지정·로그인 현황을 집계합니다.'
+            : '행사에 지정된 스타트업의 소개서 제출·로그인 현황을 집계합니다.'
         }
-      />
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatBox label={`참가 ${roleLabel}`} value={stats.total} hint={unit} />
+          {isExpert ? (
+            <StatBox label="분야 지정" value={stats.withFields} hint={unit} />
+          ) : (
+            <StatBox label="소개서 제출" value={stats.withProposal} hint={unit} />
+          )}
+          <StatBox label="로그인 완료" value={stats.loggedIn} hint={unit} />
+          <StatBox label="미로그인" value={stats.notLoggedIn} hint={unit} />
+        </div>
+      </StatCardSection>
 
-      <ParticipantDetailModal
-        open={detailTarget !== null}
-        onClose={() => setDetailTarget(null)}
-        user={detailTarget}
-        fieldNameById={fieldNameById}
-      />
-    </Card>
+      <Card className="flex flex-col gap-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-neutral-base">
+            {lockedRole ? `참가 ${PARTICIPANT_ROLE_LABELS[lockedRole]} 지정` : '참가자 지정'}
+          </h2>
+          {!lockedRole && <Tabs value={role} options={tabOptions} onChange={setInnerRole} />}
+        </div>
+
+        <CurrentList
+          eventId={eventId}
+          role={role}
+          participants={current}
+          userById={userById}
+          tables={tables}
+          locked={locked}
+          fieldNameById={fieldNameById}
+          onOpenDetail={setDetailTarget}
+          addSlot={
+            !locked ? (
+              <AddCandidates
+                eventId={eventId}
+                role={role}
+                candidates={candidates}
+                fieldNameById={fieldNameById}
+              />
+            ) : null
+          }
+        />
+
+        <ParticipantDetailModal
+          open={detailTarget !== null}
+          onClose={() => setDetailTarget(null)}
+          user={detailTarget}
+          fieldNameById={fieldNameById}
+        />
+      </Card>
+    </div>
   );
 }
 
@@ -200,7 +235,9 @@ function AddCandidates({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button onClick={() => setOpen(true)}>+ {PARTICIPANT_ROLE_LABELS[role]} 추가</Button>
+      <SectionActionButton tone="primary" onClick={() => setOpen(true)}>
+        + {PARTICIPANT_ROLE_LABELS[role]} 추가
+      </SectionActionButton>
       <AddCandidatesModal
         open={open}
         onClose={() => setOpen(false)}
@@ -338,7 +375,9 @@ function AddCandidatesModal({
           key: 'primary',
           header: '기업명',
           sortable: true,
-          cell: (u) => <span className="font-medium text-neutral-base">{dash(u.company_name)}</span>,
+          cell: (u) => (
+            <span className="font-medium text-neutral-base">{dash(u.company_name)}</span>
+          ),
         },
         { key: 'rep', header: '대표자명', cell: (u) => dash(u.representative_name) },
         {
@@ -368,9 +407,7 @@ function AddCandidatesModal({
             {u.proposal_file_url ? (
               <FileCell path={u.proposal_file_url} label="보기" />
             ) : (
-              <Badge tone="danger">
-                미업로드
-              </Badge>
+              <Badge tone="danger">미업로드</Badge>
             )}
           </span>
         ),
@@ -489,10 +526,7 @@ function CurrentList({
   }, [slots, isExpert]);
 
   // 전문가 기본 테이블은 '테이블 세팅' 탭(행사장 테이블)에서 지정하고, 여기선 읽기 전용 표시.
-  const tableCodeById = useMemo(
-    () => new Map(tables.map((t) => [t.id, t.table_code])),
-    [tables],
-  );
+  const tableCodeById = useMemo(() => new Map(tables.map((t) => [t.id, t.table_code])), [tables]);
 
   // 복수 선택(제외용). 명단에서 사라진 항목은 selectedIds 계산 시 걸러낸다.
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -555,8 +589,7 @@ function CurrentList({
 
   // 현재 페이지 행 기준 전체 선택/해제.
   const pageRows = table.rows;
-  const allPageSelected =
-    pageRows.length > 0 && pageRows.every((p) => selected.has(p.id));
+  const allPageSelected = pageRows.length > 0 && pageRows.every((p) => selected.has(p.id));
   const toggleAllPage = () =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -566,10 +599,7 @@ function CurrentList({
     });
 
   // 실제 명단에 존재하는 선택 항목만 제외 대상으로 삼는다.
-  const participantIds = useMemo(
-    () => new Set(participants.map((p) => p.id)),
-    [participants],
-  );
+  const participantIds = useMemo(() => new Set(participants.map((p) => p.id)), [participants]);
   const selectedIds = useMemo(
     () => [...selected].filter((id) => participantIds.has(id)),
     [selected, participantIds],
@@ -683,9 +713,7 @@ function CurrentList({
       {
         key: 'phone',
         header: '연락처',
-        cell: (p) => (
-          <span className="whitespace-nowrap">{dash(userOf(p)?.phone_number)}</span>
-        ),
+        cell: (p) => <span className="whitespace-nowrap">{dash(userOf(p)?.phone_number)}</span>,
       },
       {
         key: 'fields',
@@ -767,7 +795,10 @@ function CurrentList({
         const u = userOf(p);
         if (!u) return <span className="text-xs text-neutral-base/30">-</span>;
         return (
-          <div className="flex flex-nowrap justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="flex flex-nowrap justify-center gap-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <RowAction onClick={() => setEditTarget(u)}>수정</RowAction>
             <RowAction onClick={() => setLinkTarget(u)}>링크</RowAction>
             <RowAction onClick={() => setInvalidateTarget(u)}>세션무효화</RowAction>
@@ -836,9 +867,9 @@ function CurrentList({
     const count = bookingCountByUser.get(confirmTarget.participant.user_id) ?? 0;
     confirmMessage = (
       <>
-        <b>{name}</b> {roleLabel}에 배치 <b>{count}건</b>이 있습니다. 제외하면 이 배치가{' '}
-        <b>해제</b>되어 그 시간은 다시 배정할 수 있게 됩니다. (이미 상담일지가 작성된 완료 세션은{' '}
-        <b>취소</b>로 기록이 보존됩니다.) 계속하시겠습니까?
+        <b>{name}</b> {roleLabel}에 배치 <b>{count}건</b>이 있습니다. 제외하면 이 배치가 <b>해제</b>
+        되어 그 시간은 다시 배정할 수 있게 됩니다. (이미 상담일지가 작성된 완료 세션은 <b>취소</b>로
+        기록이 보존됩니다.) 계속하시겠습니까?
       </>
     );
   } else if (confirmTarget?.kind === 'bulk') {
@@ -852,9 +883,9 @@ function CurrentList({
     }, 0);
     confirmMessage = (
       <>
-        선택한 {confirmTarget.ids.length}명 중 <b>{affected}명</b>에게 배치가 있습니다. 제외하면 관련
-        배치 <b>{total}건</b>이 <b>해제</b>되어 그 시간은 다시 배정할 수 있게 됩니다. (완료 세션은{' '}
-        <b>취소</b>로 보존) 계속하시겠습니까?
+        선택한 {confirmTarget.ids.length}명 중 <b>{affected}명</b>에게 배치가 있습니다. 제외하면
+        관련 배치 <b>{total}건</b>이 <b>해제</b>되어 그 시간은 다시 배정할 수 있게 됩니다. (완료
+        세션은 <b>취소</b>로 보존) 계속하시겠습니까?
       </>
     );
   }
@@ -897,12 +928,14 @@ function CurrentList({
             {selectedIds.length}명 선택됨
           </span>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={clearSelected}>
-              선택 해제
-            </Button>
-            <Button variant="danger" onClick={requestBulkRemove} loading={removeMany.isPending}>
+            <SectionActionButton onClick={clearSelected}>선택 해제</SectionActionButton>
+            <SectionActionButton
+              tone="danger"
+              onClick={requestBulkRemove}
+              loading={removeMany.isPending}
+            >
               선택 {selectedIds.length}명 제외
-            </Button>
+            </SectionActionButton>
           </div>
         </div>
       )}

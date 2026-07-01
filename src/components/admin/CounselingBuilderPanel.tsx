@@ -3,6 +3,7 @@ import { Badge } from '@/components/common/Badge';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { Spinner } from '@/components/common/Spinner';
 import { Modal } from '@/components/common/Modal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
@@ -139,7 +140,7 @@ function QuestionEditorModal({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="문항 아래에 표시될 안내 문구"
             maxLength={500}
-            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+            className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
           />
         </div>
 
@@ -155,7 +156,7 @@ function QuestionEditorModal({
                     setOptions((prev) => prev.map((o, i) => (i === idx ? e.target.value : o)))
                   }
                   placeholder={`선택지 ${idx + 1}`}
-                  className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+                  className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
                 />
                 <Button
                   type="button"
@@ -403,17 +404,21 @@ export function CounselingBuilderPanel({
         <div className="flex flex-col gap-1">
           <h2 className="text-base font-bold text-neutral-base">상담일지 설정</h2>
           <p className="text-sm text-neutral-base/70">
-            전문가가 상담 종료 시 작성할 평가 문항을 구성합니다. 후속 연계 요청·공개 여부는 항상 제공되는
-            기본 항목입니다.
+            전문가가 상담 종료 시 작성할 평가 문항을 구성합니다. 후속 연계 요청·공개 여부는 항상
+            제공되는 기본 항목입니다.
           </p>
         </div>
       )}
 
       {lockReason && <Alert tone="info">{lockReason}</Alert>}
       {(questionsQ.isError || countQ.isError) && (
-        <Alert tone="error">상담일지 문항을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
+        <Alert tone="error">
+          상담일지 문항을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.
+        </Alert>
       )}
-      {reorderM.isError && <Alert tone="error">순서를 변경하지 못했습니다. 다시 시도해 주세요.</Alert>}
+      {reorderM.isError && (
+        <Alert tone="error">순서를 변경하지 못했습니다. 다시 시도해 주세요.</Alert>
+      )}
       {deleteM.isError && <Alert tone="error">{(deleteM.error as Error).message}</Alert>}
       {templateM.isError && <Alert tone="error">{(templateM.error as Error).message}</Alert>}
 
@@ -442,7 +447,9 @@ export function CounselingBuilderPanel({
 
       {editable && (
         <div className="flex justify-end">
-          <Button onClick={openNew}>+ 문항 추가</Button>
+          <SectionActionButton tone="primary" onClick={openNew}>
+            + 문항 추가
+          </SectionActionButton>
         </div>
       )}
 
@@ -473,7 +480,8 @@ export function CounselingBuilderPanel({
               <span className="font-bold">{deleteTarget.title}</span> 문항을 삭제하시겠습니까?
               {deleteTarget.system_key && (
                 <span className="mt-1 block text-xs text-brand">
-                  기본 항목을 삭제하면 해당 점수/의견이 기존 화면·공개 코멘트에 더 이상 동기화되지 않습니다.
+                  기본 항목을 삭제하면 해당 점수/의견이 기존 화면·공개 코멘트에 더 이상 동기화되지
+                  않습니다.
                 </span>
               )}
             </>

@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card } from '@/components/common/Card';
-import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { StatBox } from '@/components/common/StatBox';
+import { StatCardSection } from '@/components/common/StatCardSection';
 import { BookingScheduleTable } from '@/components/admin/BookingScheduleTable';
 import { CompanyBookingStatus } from '@/components/admin/CompanyBookingStatus';
 import { ForceBookingModal } from '@/components/admin/ForceBookingModal';
@@ -71,22 +71,26 @@ export function BookingStatsPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="flex flex-col gap-5 p-5">
-        {/* 제목 좌측 · 배치 액션은 카드 헤더 우측(권한 미달 시 숨김). 카드 내부 표준 버튼 크기(md). */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-bold text-neutral-base">예약 현황</h2>
-          {canForceAssign && eventId && (
+      {/* 제목 좌측 · 배치 액션은 카드 헤더 우측(권한 미달 시 숨김). 카드 내부 표준 버튼 크기(md). */}
+      <StatCardSection
+        title="예약 현황"
+        description="행사에 생성된 매칭 슬롯과 스타트업의 예약 완료 현황을 집계합니다."
+        actions={
+          canForceAssign && eventId ? (
             <div className="flex flex-wrap items-center gap-2">
               <Link to={`/admin/events/${eventId}/ai-allocation`}>
-                <Button variant="outline">AI배치</Button>
+                <SectionActionButton>AI배치</SectionActionButton>
               </Link>
-              <Button onClick={() => setForce({ open: true, slot: null, startupId: null })}>
+              <SectionActionButton
+                tone="primary"
+                onClick={() => setForce({ open: true, slot: null, startupId: null })}
+              >
                 강제 배치
-              </Button>
+              </SectionActionButton>
             </div>
-          )}
-        </div>
-
+          ) : undefined
+        }
+      >
         {stats.totalSlots === 0 ? (
           <p className="rounded-xl border border-dashed border-border px-3 py-8 text-center text-sm text-neutral-base/60">
             아직 생성된 매칭 슬롯이 없습니다. 배치 단계에서 슬롯을 생성하면 예약 현황이 표시됩니다.
@@ -101,11 +105,10 @@ export function BookingStatsPanel({
             <StatBox
               label={`잔여 세션 (${stats.slotBalance < 0 ? '슬롯 추가 필요' : '예약 가능'})`}
               value={stats.slotBalance > 0 ? `+${stats.slotBalance}` : stats.slotBalance}
-              tone={stats.slotBalance < 0 ? 'warning' : 'success'}
             />
           </div>
         )}
-      </Card>
+      </StatCardSection>
 
       <BookingScheduleTable
         slots={slots}

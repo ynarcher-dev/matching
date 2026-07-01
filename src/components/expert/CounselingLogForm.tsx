@@ -73,7 +73,9 @@ function ChoiceField({
 }) {
   const toggle = (opt: string) => {
     if (multiple) {
-      onChange(selections.includes(opt) ? selections.filter((s) => s !== opt) : [...selections, opt]);
+      onChange(
+        selections.includes(opt) ? selections.filter((s) => s !== opt) : [...selections, opt],
+      );
     } else {
       onChange([opt]);
     }
@@ -153,7 +155,7 @@ function QuestionField({
           maxLength={textMaxFor(q.question_type)}
           value={value.text ?? ''}
           onChange={(e) => onChange({ ...value, text: e.target.value })}
-          className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+          className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
         />
       )}
 
@@ -275,8 +277,7 @@ export function CounselingLogForm({
     setDraft((d) => ({ ...d, answers: { ...d.answers, [qid]: next } }));
   };
 
-  const mutationError =
-    (submitM.isError && (submitM.error as Error).message) || null;
+  const mutationError = (submitM.isError && (submitM.error as Error).message) || null;
 
   const handleManualSave = () => {
     setFormError(null);
@@ -379,9 +380,12 @@ export function CounselingLogForm({
           {/* 공개 여부 (메타 필드) */}
           <section className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5">
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-neutral-base">상담 의견 스타트업 공개</span>
+              <span className="text-sm font-semibold text-neutral-base">
+                상담 의견 스타트업 공개
+              </span>
               <span className="text-xs text-neutral-base/60">
-                점수·구조화 답변은 항상 비공개입니다. 공개 허용 시 텍스트 상담 의견만 스타트업에 노출됩니다.
+                점수·구조화 답변은 항상 비공개입니다. 공개 허용 시 텍스트 상담 의견만 스타트업에
+                노출됩니다.
               </span>
             </div>
             <Toggle

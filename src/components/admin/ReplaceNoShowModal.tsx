@@ -69,8 +69,7 @@ export function ReplaceNoShowModal({
 
   // 현장 대기 후보: 참가 스타트업 전체(기업명 순). 충돌 대상은 옵션에서 비활성 처리한다.
   const options = useMemo(
-    () =>
-      [...startups].sort((a, b) => companyName(a).localeCompare(companyName(b), 'ko')),
+    () => [...startups].sort((a, b) => companyName(a).localeCompare(companyName(b), 'ko')),
     [startups],
   );
 
@@ -86,7 +85,7 @@ export function ReplaceNoShowModal({
   };
 
   const fieldClass = (invalid: boolean) =>
-    `w-full rounded-lg border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:bg-surface/60 ${
+    `h-9 w-full rounded-lg border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:bg-surface/60 ${
       touched && invalid ? 'border-brand' : 'border-border'
     }`;
 
@@ -118,7 +117,8 @@ export function ReplaceNoShowModal({
               {tableCode ? ` · ${tableCode}` : ''}
             </p>
             <p className="text-xs text-neutral-base/70">
-              {formatDateTime(slot.start_time, timezone)} ~ {formatDateTime(slot.end_time, timezone).slice(-5)}
+              {formatDateTime(slot.start_time, timezone)} ~{' '}
+              {formatDateTime(slot.end_time, timezone).slice(-5)}
             </p>
             {prevStartup && (
               <p className="mt-1 text-xs text-danger">노쇼: {companyName(prevStartup)}</p>

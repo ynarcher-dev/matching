@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
-import { Button } from '@/components/common/Button';
+import { TableActionButton } from '@/components/common/ActionButton';
+import { Badge } from '@/components/common/Badge';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
 import { FilterBar, SearchInput, FilterChips } from '@/components/common/FilterBar';
 import { Pagination } from '@/components/common/Pagination';
+import { StatBox } from '@/components/common/StatBox';
+import { StatCardSection } from '@/components/common/StatCardSection';
 import { useDataTable } from '@/hooks/useDataTable';
 import { useEventNotifications, useRetryNotification } from '@/hooks/useNotifications';
 import {
@@ -13,13 +16,9 @@ import {
   statusWeight,
   summarizeNotifications,
 } from '@/lib/notification';
-import {
-  CHANNEL_LABELS,
-  NOTIFICATION_STATUS_LABELS,
-  notificationTypeLabel,
-} from '@/lib/labels';
+import { CHANNEL_LABELS, NOTIFICATION_STATUS_LABELS, notificationTypeLabel } from '@/lib/labels';
 import { formatDateTime } from '@/lib/datetime';
-import { BADGE_TONE, type Tone } from '@/lib/tone';
+import type { Tone } from '@/lib/tone';
 import type { SortValue } from '@/lib/dataTable';
 import type { NotificationLog, NotificationStatus } from '@/types/notification';
 
@@ -33,11 +32,6 @@ const STATUS_TONE: Record<NotificationStatus, Tone> = {
   PENDING: 'warning',
   SENT: 'success',
   FAILED: 'danger',
-};
-const STATUS_BADGE: Record<NotificationStatus, string> = {
-  PENDING: BADGE_TONE[STATUS_TONE.PENDING],
-  SENT: BADGE_TONE[STATUS_TONE.SENT],
-  FAILED: BADGE_TONE[STATUS_TONE.FAILED],
 };
 
 /** 상태 필터 값('ALL' + 실제 상태). */
@@ -82,7 +76,11 @@ export function NotificationLogPanel({ eventId, timezone }: NotificationLogPanel
 
   const table = useDataTable(logs, {
     getSearchText: (l) =>
-      [notificationTypeLabel(l.notification_type), maskDestination(l.channel, l.destination), l.content]
+      [
+        notificationTypeLabel(l.notification_type),
+        maskDestination(l.channel, l.destination),
+        l.content,
+      ]
         .filter(Boolean)
         .join(' '),
     sortValues,
@@ -97,9 +95,7 @@ export function NotificationLogPanel({ eventId, timezone }: NotificationLogPanel
         header: '상태',
         sortable: true,
         cell: (l) => (
-          <span className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[l.status]}`}>
-            {NOTIFICATION_STATUS_LABELS[l.status]}
-          </span>
+          <Badge tone={STATUS_TONE[l.status]}>{NOTIFICATION_STATUS_LABELS[l.status]}</Badge>
         ),
       },
       {
@@ -164,9 +160,9 @@ export function NotificationLogPanel({ eventId, timezone }: NotificationLogPanel
         align: 'right',
         cell: (l) =>
           isRetryable(l) ? (
-            <Button variant="outline" onClick={() => retry.mutate(l.id)} disabled={retry.isPending}>
+            <TableActionButton onClick={() => retry.mutate(l.id)} disabled={retry.isPending}>
               재시도
-            </Button>
+            </TableActionButton>
           ) : (
             <span className="text-xs text-neutral-base/30">–</span>
           ),
@@ -177,23 +173,21 @@ export function NotificationLogPanel({ eventId, timezone }: NotificationLogPanel
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="flex flex-col gap-4 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-bold text-neutral-base">알림 발송 현황</h2>
-          <span className="text-xs text-neutral-base/50">15초마다 자동 갱신</span>
-        </div>
-
+      <StatCardSection
+        title="알림 발송 현황"
+        actions={<span className="text-xs text-neutral-base/50">15초마다 자동 갱신</span>}
+      >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatBox label="전체" value={summary.total} />
           <StatBox label="대기/재시도" value={summary.pending} />
           <StatBox label="발송 완료" value={summary.sent} />
-          <StatBox label="영구 실패" value={summary.failed} tone="warn" />
+          <StatBox label="영구 실패" value={summary.failed} />
         </div>
 
         {retry.isError && (
           <Alert tone="error">{(retry.error as Error).message ?? '재시도에 실패했습니다.'}</Alert>
         )}
-      </Card>
+      </StatCardSection>
 
       <Card className="flex flex-col gap-3 p-5">
         <h3 className="text-base font-bold text-neutral-base">발송 로그</h3>
@@ -236,25 +230,6 @@ export function NotificationLogPanel({ eventId, timezone }: NotificationLogPanel
           onPageChange={table.setPage}
         />
       </Card>
-    </div>
-  );
-}
-
-function StatBox({
-  label,
-  value,
-  tone = 'base',
-}: {
-  label: string;
-  value: number;
-  tone?: 'base' | 'warn';
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-surface/40 px-3 py-3 text-center">
-      <p className={`text-2xl font-bold ${tone === 'warn' ? 'text-brand' : 'text-neutral-base'}`}>
-        {value}
-      </p>
-      <p className="mt-0.5 text-xs font-medium text-neutral-base/60">{label}</p>
     </div>
   );
 }

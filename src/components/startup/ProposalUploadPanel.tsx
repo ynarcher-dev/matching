@@ -93,7 +93,9 @@ export function ProposalUploadPanel({ userId, timezone }: ProposalUploadPanelPro
       </p>
 
       {proposalQ.isError && (
-        <Alert tone="error">소개서 상태를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
+        <Alert tone="error">
+          소개서 상태를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.
+        </Alert>
       )}
 
       {/* 현재 상태 */}
@@ -119,7 +121,9 @@ export function ProposalUploadPanel({ userId, timezone }: ProposalUploadPanelPro
         </div>
       ) : (
         !proposalQ.isLoading && (
-          <Alert tone="info">아직 제출된 사업소개서가 없습니다. 아래에서 PDF 파일을 업로드해 주세요.</Alert>
+          <Alert tone="info">
+            아직 제출된 사업소개서가 없습니다. 아래에서 PDF 파일을 업로드해 주세요.
+          </Alert>
         )
       )}
 
@@ -192,7 +196,7 @@ function HomepageField({ userId }: { userId: string }) {
             setJustSaved(false);
           }}
           placeholder="https://example.com"
-          className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+          className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
         />
         <Button
           type="button"

@@ -1,3 +1,5 @@
+import { MultiChoiceChip } from '@/components/common/ChoiceChip';
+
 export interface ChipOption {
   value: string;
   label: string;
@@ -52,22 +54,15 @@ export function MultiSelectChips({
             const selected = value.includes(o.value);
             const disabled = !selected && max != null && value.length >= max;
             return (
-              <button
+              <MultiChoiceChip
                 key={o.value}
-                type="button"
                 onClick={() => toggle(o.value)}
                 disabled={disabled}
-                aria-pressed={selected}
-                className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors ${
-                  selected
-                    ? 'border-brand bg-brand text-white'
-                    : disabled
-                      ? 'border-border bg-surface text-neutral-base/40'
-                      : 'border-border bg-surface-raised text-neutral-base hover:bg-surface'
-                }`}
+                selected={selected}
+                className={disabled && !selected ? 'bg-surface text-neutral-base/40' : ''}
               >
                 {o.label}
-              </button>
+              </MultiChoiceChip>
             );
           })}
         </div>

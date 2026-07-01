@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/common/Card';
-import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { EventStatusBadge } from '@/components/admin/EventStatusBadge';
 import { EventPermissionBadge } from '@/components/admin/EventPermissionBadge';
 import { canManageEvent } from '@/lib/eventPermission';
@@ -24,7 +24,14 @@ interface EventCardProps {
  * 행사 요약 카드 (page_admin_event_list.md §1.2).
  * 타이틀·상태 배지·내 권한 배지·중요 일정·참가 통계·상세 바로가기를 담는다.
  */
-export function EventCard({ event, onEdit, canCancel, onCancel, permission, isSuper }: EventCardProps) {
+export function EventCard({
+  event,
+  onEdit,
+  canCancel,
+  onCancel,
+  permission,
+  isSuper,
+}: EventCardProps) {
   const cancelled = event.status === 'CANCELLED';
   const canEdit = canManageEvent(permission);
   return (
@@ -62,21 +69,17 @@ export function EventCard({ event, onEdit, canCancel, onCancel, permission, isSu
 
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <Link to={`/admin/events/${event.id}`} className="flex-1">
-          <Button className="w-full">행사 상세 대시보드</Button>
+          <SectionActionButton tone="primary" fullWidth>
+            행사 상세 대시보드
+          </SectionActionButton>
         </Link>
         {!cancelled && canEdit && (
-          <Button variant="outline" onClick={() => onEdit(event)}>
-            편집
-          </Button>
+          <SectionActionButton onClick={() => onEdit(event)}>편집</SectionActionButton>
         )}
         {!cancelled && canCancel && (
-          <Button
-            variant="outline"
-            onClick={() => onCancel(event)}
-            className="text-brand hover:bg-danger-surface"
-          >
+          <SectionActionButton tone="danger" onClick={() => onCancel(event)}>
             취소
-          </Button>
+          </SectionActionButton>
         )}
       </div>
     </Card>

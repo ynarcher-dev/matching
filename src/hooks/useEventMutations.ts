@@ -4,7 +4,7 @@ import { localInputToIso } from '@/lib/datetime';
 import { eventKeys } from '@/hooks/useEvents';
 import { eventDetailKeys } from '@/hooks/useEventDetail';
 import type { EventFormValues } from '@/schemas/eventSchemas';
-import type { EventRow } from '@/types/event';
+import type { EventRow, EventStatus } from '@/types/event';
 
 /** 폼 값(벽시계 문자열) → events 테이블 컬럼(UTC ISO) 변환. */
 function toEventColumns(values: EventFormValues) {
@@ -79,5 +79,57 @@ export function useCancelEvent() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: eventKeys.all }),
+  });
+}
+
+/**
+ * 행사 상태 수동 변경 (page_admin_event_list.md §2.2) — 최고 관리자 전용.
+ * 취소와 동일한 override_event_status RPC 를 경유하되 DRAFT~FINISHED 로만 전환한다.
+ * 성공 시 status_override=TRUE 로 고정되어 자동 전환(1분 Cron)이 이 행사를 건너뛴다.
+ */
+export function useOverrideEventStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      status,
+      reason,
+    }: {
+      id: string;
+      status: EventStatus;
+      reason: string;
+    }) => {
+      const { error } = await supabase.rpc('override_event_status', {
+        p_event_id: id,
+        p_status: status,
+        p_reason: reason.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: eventKeys.all });
+      qc.invalidateQueries({ queryKey: eventDetailKeys.root(id) });
+    },
+  });
+}
+
+/**
+ * 상태 고정 해제 → 일정 기반 자동 전환 재개 (clear_event_status_override RPC).
+ * 사유·감사 로그가 필수이며 최고 관리자만 호출할 수 있다.
+ */
+export function useClearEventStatusOverride() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await supabase.rpc('clear_event_status_override', {
+        p_event_id: id,
+        p_reason: reason.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: eventKeys.all });
+      qc.invalidateQueries({ queryKey: eventDetailKeys.root(id) });
+    },
   });
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
+import { ChoiceChip } from '@/components/common/ChoiceChip';
 import type { MatchingSlotRow } from '@/types/eventDetail';
 import type { PortalExpert } from '@/types/startupBooking';
 import { ExpertBookingList } from './ExpertBookingList';
@@ -59,18 +60,15 @@ export function BookingSlotsGrid({
           {GRID_TABS.map((t) => {
             const active = tab === t.value;
             return (
-              <button
+              <ChoiceChip
                 key={t.value}
-                type="button"
+                selected={active}
+                shape="pill"
                 onClick={() => setTab(t.value)}
-                className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
-                  active
-                    ? 'border-brand bg-brand text-white'
-                    : 'border-border bg-white text-neutral-base hover:bg-surface'
-                }`}
+                className={active ? 'bg-brand text-white' : 'border-border bg-white'}
               >
                 {t.label}
-              </button>
+              </ChoiceChip>
             );
           })}
         </div>
@@ -86,7 +84,8 @@ export function BookingSlotsGrid({
 
       {!canBook && (
         <Alert tone="info">
-          현재 예약 단계가 아니어서 새 슬롯을 신청할 수 없습니다. 예약(BOOKING) 단계에서 신청할 수 있습니다.
+          현재 예약 단계가 아니어서 새 슬롯을 신청할 수 없습니다. 예약(BOOKING) 단계에서 신청할 수
+          있습니다.
         </Alert>
       )}
 

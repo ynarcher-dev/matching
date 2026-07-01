@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/common/Button';
+import { TableActionButton } from '@/components/common/ActionButton';
 import { EventStatusBadge } from '@/components/admin/EventStatusBadge';
 import { EventPermissionBadge } from '@/components/admin/EventPermissionBadge';
 import type { DataTableColumn } from '@/components/common/DataTable';
@@ -123,24 +123,15 @@ export function buildEventColumns({
         return (
           <div className="flex flex-wrap items-center justify-center gap-1.5">
             <Link to={`/admin/events/${e.id}`}>
-              <Button variant="outline" size="sm">
-                상세
-              </Button>
+              <TableActionButton>상세</TableActionButton>
             </Link>
             {!cancelled && canEdit && (
-              <Button variant="outline" size="sm" onClick={() => onEdit(e)}>
-                편집
-              </Button>
+              <TableActionButton onClick={() => onEdit(e)}>편집</TableActionButton>
             )}
             {!cancelled && canCancel && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onCancel(e)}
-                className="text-brand hover:bg-danger-surface"
-              >
+              <TableActionButton tone="danger" onClick={() => onCancel(e)}>
                 취소
-              </Button>
+              </TableActionButton>
             )}
           </div>
         );

@@ -167,7 +167,10 @@ export function EventOperatorAssignModal({
               </Alert>
             )}
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="event-grant-reason" className="text-sm font-semibold text-neutral-base">
+              <label
+                htmlFor="event-grant-reason"
+                className="text-sm font-semibold text-neutral-base"
+              >
                 사유
               </label>
               <textarea
@@ -177,7 +180,7 @@ export function EventOperatorAssignModal({
                 onChange={(e) => setReason(e.target.value)}
                 onBlur={() => setTouched(true)}
                 placeholder="예: 해당 행사 운영 담당 배정"
-                className={`w-full rounded-lg border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 ${
+                className={`h-9 w-full rounded-lg border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 ${
                   touched && reason.trim().length === 0 ? 'border-brand' : 'border-border'
                 }`}
               />

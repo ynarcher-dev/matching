@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/common/Badge';
-import { Button } from '@/components/common/Button';
+import { TableActionButton } from '@/components/common/ActionButton';
+import { DotTag } from '@/components/common/Tag';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
@@ -148,8 +149,11 @@ export function CompanyBookingStatus({
   );
   const table = useDataTable(allRows, {
     getSearchText: (r) =>
-      [companyName(r.startup), r.startup.representative_name ?? '', ...r.bookings.map((b) => b.expertName)]
-        .join(' '),
+      [
+        companyName(r.startup),
+        r.startup.representative_name ?? '',
+        ...r.bookings.map((b) => b.expertName),
+      ].join(' '),
     sortValues,
     filters,
     initialSort: { key: 'progress', direction: 'asc' },
@@ -172,9 +176,7 @@ export function CompanyBookingStatus({
         header: '기업명',
         sortable: true,
         className: 'w-44',
-        cell: (r) => (
-          <span className="font-bold text-neutral-base">{companyName(r.startup)}</span>
-        ),
+        cell: (r) => <span className="font-bold text-neutral-base">{companyName(r.startup)}</span>,
       },
       {
         key: 'rep',
@@ -210,20 +212,18 @@ export function CompanyBookingStatus({
               ))}
               {canManage && onAssign
                 ? Array.from({ length: remaining }).map((_, i) => (
-                    <Button
+                    <TableActionButton
                       key={i}
                       type="button"
-                      variant="outline"
-                      size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         onAssign(r.startup.id);
                       }}
                       title="이 기업에 전문가 슬롯을 강제 배정"
-                      className="h-7 border-dashed text-neutral-base/45 hover:border-brand hover:text-brand"
+                      className="border-dashed text-neutral-base/45 hover:border-brand hover:text-brand"
                     >
                       + 배정
-                    </Button>
+                    </TableActionButton>
                   ))
                 : r.bookings.length === 0 && (
                     <span className="text-xs text-neutral-base/40">미신청</span>
@@ -241,15 +241,9 @@ export function CompanyBookingStatus({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold text-neutral-base">기업별 배치 현황</h3>
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <Badge tone="info">
-            완료 {summary.full}
-          </Badge>
-          <Badge tone="neutral">
-            진행 {summary.partial}
-          </Badge>
-          <Badge tone="warning">
-            미신청 {summary.none}
-          </Badge>
+          <Badge tone="info">완료 {summary.full}</Badge>
+          <Badge tone="neutral">진행 {summary.partial}</Badge>
+          <Badge tone="warning">미신청 {summary.none}</Badge>
           <span className="text-neutral-base/50">· 최대 {maxSessions}회</span>
         </div>
       </div>
@@ -359,14 +353,10 @@ function BookingChip({
   const typeLabel = BOOKING_TYPE_LABELS[b.slot.booking_type];
   const orgPart = b.expertOrg ? ` · ${b.expertOrg}` : '';
   return (
-    <span
+    <DotTag
       title={`${time} · ${b.expertName}${orgPart} · ${typeLabel}`}
-      className="inline-flex h-7 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface-raised px-2 text-xs"
+      dotClassName={TYPE_DOT[b.slot.booking_type]}
     >
-      <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${TYPE_DOT[b.slot.booking_type]}`}
-        aria-hidden
-      />
       <span className="font-bold tabular-nums text-neutral-base">{time}</span>
       <span className="truncate text-neutral-base/75">{b.expertName}</span>
       {canManage && (
@@ -383,6 +373,6 @@ function BookingChip({
           ×
         </button>
       )}
-    </span>
+    </DotTag>
   );
 }

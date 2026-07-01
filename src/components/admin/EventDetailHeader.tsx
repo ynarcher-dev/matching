@@ -42,6 +42,14 @@ export function EventDetailHeader({ event, footer }: EventDetailHeaderProps) {
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <EventStatusBadge status={event.status} />
+            {event.status_override && (
+              <span
+                className="text-[11px] font-medium text-neutral-base/60"
+                title={event.status_override_reason ?? undefined}
+              >
+                상태 고정 · 자동 전환 중지
+              </span>
+            )}
           </div>
         </div>
 

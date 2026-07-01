@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Badge } from '@/components/common/Badge';
-import { Button } from '@/components/common/Button';
+import { TableActionButton } from '@/components/common/ActionButton';
 import { formatDateTime } from '@/lib/datetime';
 import { BUCKET_SPEC, createParticipantSignedUrl, validateParticipantFile } from '@/lib/storage';
 import { useSetParticipantFile } from '@/hooks/useUserMutations';
@@ -58,23 +58,20 @@ function ProposalInlineUpload({ user }: { user: ProposalFileUser }) {
           e.target.value = '';
         }}
       />
-      <Button
+      <TableActionButton
         type="button"
-        variant="outline"
-        size="sm"
+        tone="danger"
         onClick={() => inputRef.current?.click()}
         disabled={setFile.isPending}
         title={`미업로드 상태입니다. ${BUCKET_SPEC.STARTUP.hint} 소개서를 올립니다.`}
-        className="min-w-[4.5rem] whitespace-nowrap text-brand"
+        className="min-w-[4.5rem] whitespace-nowrap"
       >
         {setFile.isPending ? '업로드 중' : '미업로드'}
-      </Button>
+      </TableActionButton>
       {error && <span className="whitespace-normal text-xs font-medium text-brand">{error}</span>}
     </div>
   );
 }
-
-
 
 /** 분야 컬럼은 가장 좁게 유지 — 나머지 핵심 정보가 한 줄에 보이도록 1개만 노출하고 나머지는 +N 으로 접는다. */
 const FIELDS_MAX_VISIBLE = 1;
@@ -87,7 +84,11 @@ export function FieldsCell({ ids, nameById }: { ids: string[]; nameById: Map<str
   return (
     <div className="flex flex-nowrap items-center gap-1" title={names.join(', ')}>
       {visible.map((name, i) => (
-        <Badge key={ids[i]} tone="muted" className="whitespace-nowrap font-medium text-neutral-base">
+        <Badge
+          key={ids[i]}
+          tone="muted"
+          className="whitespace-nowrap font-medium text-neutral-base"
+        >
           {name}
         </Badge>
       ))}
@@ -127,18 +128,15 @@ export function FileCell({
   };
 
   return (
-    <Button
+    <TableActionButton
       type="button"
-      variant={active && !error ? 'primary' : 'outline'}
-      size="sm"
+      tone={active && !error ? 'primary' : error ? 'danger' : 'outline'}
       onClick={open}
       disabled={loading}
-      className={`min-w-[4.5rem] whitespace-nowrap ${
-        error ? 'text-brand' : active ? '' : 'text-neutral-base'
-      }`}
+      className="min-w-[4.5rem] whitespace-nowrap"
     >
       {loading ? '여는 중' : error ? '오류 · 재시도' : label}
-    </Button>
+    </TableActionButton>
   );
 }
 
@@ -152,14 +150,13 @@ export function RowAction({
   danger?: boolean;
 }) {
   return (
-    <Button
+    <TableActionButton
       type="button"
-      variant="outline"
-      size="sm"
+      tone={danger ? 'danger' : 'outline'}
       onClick={onClick}
-      className={`whitespace-nowrap ${danger ? 'text-brand' : 'text-neutral-base'}`}
+      className="whitespace-nowrap"
     >
       {children}
-    </Button>
+    </TableActionButton>
   );
 }

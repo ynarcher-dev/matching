@@ -1,9 +1,10 @@
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { displayName, ROLE_LABELS } from '@/lib/labels';
+import { getNavTitle } from '@/lib/navigation';
 
 /**
  * 상단 헤더 (page_auth_layout.md §2.3 / 9-C).
@@ -15,7 +16,11 @@ export function Header() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  const toggleSidebarCollapsed = useUiStore((s) => s.toggleSidebarCollapsed);
+  const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
+  const location = useLocation();
   const navigate = useNavigate();
+  const title = getNavTitle(location.pathname);
 
   const onLogout = async () => {
     await logout();
@@ -25,20 +30,29 @@ export function Header() {
   const isSuper = user?.role === 'ADMIN' && user.is_super_admin;
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-surface-raised px-4">
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[#e5e5e5] bg-white px-6">
       <div className="flex items-center gap-3">
         <button
           type="button"
           aria-label="메뉴 열기"
           onClick={toggleSidebar}
-          className="rounded-md p-1.5 text-neutral-base transition-colors hover:bg-surface lg:hidden"
+          className="rounded-md p-2 text-neutral-base transition-colors hover:bg-surface lg:hidden"
         >
           <HamburgerIcon />
         </button>
-        <span className="text-base font-bold text-neutral-base">비즈니스 매칭</span>
+        <button
+          type="button"
+          aria-label={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+          title={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+          onClick={toggleSidebarCollapsed}
+          className="hidden rounded-md p-2 text-neutral-base transition-colors hover:bg-surface lg:inline-flex"
+        >
+          {sidebarCollapsed ? <ExpandSidebarIcon /> : <CollapseSidebarIcon />}
+        </button>
+        <h1 className="m-0 text-lg font-semibold text-neutral-base">{title}</h1>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {user && (
           <div className="hidden items-center gap-2 sm:flex">
             <Badge tone={isSuper ? 'brand' : 'neutral'} size="11">
@@ -49,7 +63,7 @@ export function Header() {
             </span>
           </div>
         )}
-        <Button variant="outline" size="sm" onClick={onLogout}>
+        <Button variant="outline" size="sm" onClick={onLogout} className="shrink-0">
           로그아웃
         </Button>
       </div>
@@ -61,6 +75,24 @@ function HamburgerIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CollapseSidebarIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M12.5 5L7.5 10L12.5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15.5 4V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ExpandSidebarIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M7.5 5L12.5 10L7.5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4.5 4V16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

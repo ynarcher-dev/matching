@@ -62,7 +62,9 @@ export function ChoiceInput({
   const toggle = (opt: string) => {
     if (readOnly || !onChange) return;
     if (multiple) {
-      onChange(selections.includes(opt) ? selections.filter((s) => s !== opt) : [...selections, opt]);
+      onChange(
+        selections.includes(opt) ? selections.filter((s) => s !== opt) : [...selections, opt],
+      );
     } else {
       onChange([opt]);
     }
@@ -143,7 +145,7 @@ export function QuestionField({
             maxLength={textMaxFor(q.question_type)}
             value={v.text ?? ''}
             onChange={(e) => onChange({ ...v, text: e.target.value })}
-            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+            className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
           />
         ) : (
           <>

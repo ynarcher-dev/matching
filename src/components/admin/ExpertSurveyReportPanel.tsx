@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react';
 import { Badge } from '@/components/common/Badge';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
-import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { Spinner } from '@/components/common/Spinner';
 import { StatBox } from '@/components/common/StatBox';
+import { StatCardSection } from '@/components/common/StatCardSection';
 import { FilterBar, SearchInput, FilterChips } from '@/components/common/FilterBar';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useEventSurveyQuestions } from '@/hooks/useSurveyBuilder';
@@ -240,27 +241,21 @@ export function ExpertSurveyReportPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 통계 카드 섹션 — 제목 + 응답 현황(예약/진행 관리와 동일한 StatBox 레이아웃) */}
-      <Card className="flex flex-col gap-5 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-base font-bold text-neutral-base">전문가 만족도 결과</h2>
-            <p className="text-sm text-neutral-base/70">
-              스타트업이 상담한 전문가/세션별로 제출한 만족도를 전문가별로 집계합니다.
-            </p>
-          </div>
+      {/* 통계 카드 섹션 — 제목 + 응답 현황(공통 StatCardSection 레이아웃) */}
+      <StatCardSection
+        title="전문가 만족도 결과"
+        description="스타트업이 상담한 전문가/세션별로 제출한 만족도를 전문가별로 집계합니다."
+        actions={
           <div className="flex flex-wrap items-center gap-2">
             {onOpenSettings && (
-              <Button variant="outline" onClick={onOpenSettings}>
-                전문가 만족도 설정
-              </Button>
+              <SectionActionButton onClick={onOpenSettings}>전문가 만족도 설정</SectionActionButton>
             )}
-            <Button variant="outline" onClick={handleExport} disabled={responses.length === 0}>
+            <SectionActionButton onClick={handleExport} disabled={responses.length === 0}>
               CSV 내보내기
-            </Button>
+            </SectionActionButton>
           </div>
-        </div>
-
+        }
+      >
         {policyHint && <Alert tone="info">{policyHint}</Alert>}
         {(questionsQ.isError || reportQ.isError) && (
           <Alert tone="error">결과를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
@@ -277,13 +272,9 @@ export function ExpertSurveyReportPanel({
             value={Math.max(0, totalSessions - responses.length)}
             hint="건"
           />
-          <StatBox
-            label="응답률"
-            value={`${responseRatePct}%`}
-            tone={totalSessions > 0 && responses.length >= totalSessions ? 'success' : 'default'}
-          />
+          <StatBox label="응답률" value={`${responseRatePct}%`} />
         </div>
-      </Card>
+      </StatCardSection>
 
       {/* 전문가별 집계 */}
       <Card className="flex flex-col gap-4 p-5">

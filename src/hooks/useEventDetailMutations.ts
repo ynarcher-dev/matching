@@ -281,8 +281,11 @@ export function useGenerateSlots(eventId: string) {
       breakMinutes: number;
       sessionCount: number;
       expertIds?: string[];
-      replaceUnbooked: boolean;
+      mealStartsIso?: string[];
+      mealEndsIso?: string[];
     }) => {
+      const mealStarts = params.mealStartsIso ?? [];
+      const mealEnds = params.mealEndsIso ?? [];
       const { data, error } = await supabase.rpc('generate_event_slots', {
         p_event_id: eventId,
         p_start_time: params.startIso,
@@ -290,7 +293,8 @@ export function useGenerateSlots(eventId: string) {
         p_session_count: params.sessionCount,
         p_break_minutes: params.breakMinutes,
         p_expert_ids: params.expertIds ?? null,
-        p_replace_unbooked: params.replaceUnbooked,
+        p_meal_starts: mealStarts.length > 0 ? mealStarts : null,
+        p_meal_ends: mealEnds.length > 0 ? mealEnds : null,
       });
       if (error) throw error;
       return (data as number) ?? 0;

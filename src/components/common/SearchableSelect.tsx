@@ -43,8 +43,7 @@ export function SearchableSelect({
     const q = query.trim().toLowerCase();
     if (!q) return options;
     return options.filter(
-      (o) =>
-        o.label.toLowerCase().includes(q) || (o.keywords ?? '').toLowerCase().includes(q),
+      (o) => o.label.toLowerCase().includes(q) || (o.keywords ?? '').toLowerCase().includes(q),
     );
   }, [options, query]);
 
@@ -76,7 +75,7 @@ export function SearchableSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 text-left text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-border bg-surface-raised px-3 text-left text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className={selected ? '' : 'text-neutral-base/50'}>
           {selected ? selected.label : placeholder}
@@ -94,7 +93,7 @@ export function SearchableSelect({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={searchPlaceholder}
-              className="w-full rounded-md border border-border bg-surface-raised px-2 py-1.5 text-sm text-neutral-base outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+              className="h-8 w-full rounded-md border border-border bg-surface-raised px-2 text-sm text-neutral-base outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
             />
           </div>
           <ul role="listbox" className="max-h-60 overflow-y-auto py-1">

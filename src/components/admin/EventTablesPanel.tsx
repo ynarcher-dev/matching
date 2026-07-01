@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Card } from '@/components/common/Card';
-import { Button } from '@/components/common/Button';
+import { SectionActionButton, TableActionButton } from '@/components/common/ActionButton';
 import { Badge } from '@/components/common/Badge';
 import { TextField } from '@/components/common/TextField';
 import { Alert } from '@/components/common/Alert';
@@ -16,7 +16,9 @@ import {
   useDeleteEventTable,
   useDeleteEventTables,
   useSetTableExpert,
+  useSetTableManager,
 } from '@/hooks/useEventDetailMutations';
+import { useEventOperators } from '@/hooks/useOperators';
 import type { AssignableUser, EventParticipantRow, EventTable } from '@/types/eventDetail';
 
 interface EventTablesPanelProps {
@@ -27,14 +29,17 @@ interface EventTablesPanelProps {
   /** user_id → 사용자(전문가 이름 표시용). */
   userById: Map<string, AssignableUser>;
   locked: boolean;
+  /** 테이블 현장 담당자 지정 권한(OWNER/MANAGER). false 면 담당자는 읽기전용. */
+  canManage: boolean;
 }
+
+/** 현장 담당자 셀렉트 옵션(행사 배정 오퍼레이터). */
+type ManagerOption = { userId: string; name: string };
 
 const EMPTY: EventTableFormValues = { table_code: '', description: '', is_active: true };
 
 /** 삭제 확인 대상: 단건(테이블) 또는 복수(선택 id 목록). */
-type DeleteTarget =
-  | { kind: 'single'; table: EventTable }
-  | { kind: 'bulk'; ids: string[] };
+type DeleteTarget = { kind: 'single'; table: EventTable } | { kind: 'bulk'; ids: string[] };
 
 /**
  * 행사장 테이블 관리 (page_admin_event_detail.md §2.1 테이블 지정).
@@ -47,16 +52,30 @@ export function EventTablesPanel({
   participants,
   userById,
   locked,
+  canManage,
 }: EventTablesPanelProps) {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   // 추가 폼에서 고른 담당 전문가(참가자 id). ''=미지정.
   const [formExpertId, setFormExpertId] = useState('');
+  // 추가 폼에서 고른 현장 담당자(오퍼레이터 user_id). ''=미지정.
+  const [formManagerId, setFormManagerId] = useState('');
   // 복수 선택(삭제용). 목록에서 사라진 항목은 selectedIds 계산 시 걸러낸다.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const save = useSaveEventTable(eventId);
   const del = useDeleteEventTable(eventId);
   const delMany = useDeleteEventTables(eventId);
   const setExpert = useSetTableExpert(eventId);
+  const setManager = useSetTableManager(eventId);
+
+  // 현장 담당자 후보 = 이 행사에 배정된 오퍼레이터(STAFF+). 이름순 정렬.
+  const operatorsQ = useEventOperators(eventId);
+  const managers: ManagerOption[] = useMemo(
+    () =>
+      (operatorsQ.data ?? [])
+        .map((o) => ({ userId: o.user_id, name: o.operator_name }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+    [operatorsQ.data],
+  );
 
   // 담당 전문가 지정 대상: 참가 전문가만. 이름순으로 정렬해 셀렉트에 나열한다.
   const experts: ExpertOption[] = useMemo(
@@ -111,12 +130,16 @@ export function EventTablesPanel({
       { values },
       {
         onSuccess: (tableId) => {
-          // 추가 시 담당 전문가를 함께 배정(선택했을 때만).
+          // 추가 시 담당 전문가·현장 담당자를 함께 배정(선택했을 때만).
           if (formExpertId) {
             setExpert.mutate({ tableId, participantId: formExpertId });
           }
+          if (formManagerId) {
+            setManager.mutate({ tableId, userId: formManagerId });
+          }
           reset(EMPTY);
           setFormExpertId('');
+          setFormManagerId('');
         },
       },
     );
@@ -177,6 +200,31 @@ export function EventTablesPanel({
           );
         },
       },
+      {
+        key: 'manager',
+        header: '현장 담당자',
+        cell: (t) => {
+          const managerName = t.manager_user_id
+            ? (managers.find((m) => m.userId === t.manager_user_id)?.name ?? '(배정 외 담당자)')
+            : null;
+          if (locked || !canManage) {
+            return (
+              <span className="text-neutral-base/80">{managerName ?? '미지정'}</span>
+            );
+          }
+          return (
+            <span onClick={(e) => e.stopPropagation()}>
+              <ManagerSelect
+                value={t.manager_user_id ?? ''}
+                onChange={(userId) => setManager.mutate({ tableId: t.id, userId: userId || null })}
+                managers={managers}
+                disabled={setManager.isPending}
+                ariaLabel={`${t.table_code} 현장 담당자`}
+              />
+            </span>
+          );
+        },
+      },
     ];
 
     if (!locked) {
@@ -217,15 +265,13 @@ export function EventTablesPanel({
         className: 'w-20',
         cell: (t) => (
           <span onClick={(e) => e.stopPropagation()}>
-            <Button
+            <TableActionButton
               type="button"
               onClick={() => setDeleteTarget({ kind: 'single', table: t })}
-              variant="outline"
-              size="sm"
-              className="text-brand"
+              tone="danger"
             >
               삭제
-            </Button>
+            </TableActionButton>
           </span>
         ),
       });
@@ -233,14 +279,27 @@ export function EventTablesPanel({
 
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locked, experts, selected, allSelected, setExpert.isPending]);
+  }, [
+    locked,
+    canManage,
+    experts,
+    managers,
+    selected,
+    allSelected,
+    setExpert.isPending,
+    setManager.isPending,
+  ]);
 
   return (
     <Card className="flex flex-col gap-4 p-5">
       <h2 className="text-lg font-bold text-neutral-base">행사장 테이블</h2>
 
       {!locked && (
-        <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded-xl border border-border bg-surface/40 p-3" noValidate>
+        <form
+          onSubmit={onSubmit}
+          className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3"
+          noValidate
+        >
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[150px] flex-1">
               <TextField
@@ -266,12 +325,25 @@ export function EventTablesPanel({
                 experts={experts}
                 disabled={experts.length === 0}
                 ariaLabel="담당 전문가"
-                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50"
+                className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50"
               />
             </div>
-            <Button type="submit" loading={save.isPending} className="border border-transparent">
+            {canManage && (
+              <div className="flex min-w-[150px] flex-1 flex-col gap-1.5">
+                <label className="text-sm font-semibold text-neutral-base">현장 담당자(선택)</label>
+                <ManagerSelect
+                  value={formManagerId}
+                  onChange={setFormManagerId}
+                  managers={managers}
+                  disabled={managers.length === 0}
+                  ariaLabel="현장 담당자"
+                  className="h-9 w-full rounded-lg border border-border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50"
+                />
+              </div>
+            )}
+            <SectionActionButton type="submit" tone="primary" loading={save.isPending}>
               테이블 추가
-            </Button>
+            </SectionActionButton>
           </div>
           {experts.length === 0 && (
             <p className="text-xs text-neutral-base/50">
@@ -283,7 +355,15 @@ export function EventTablesPanel({
       )}
 
       {setExpert.isError && (
-        <Alert tone="error">담당 전문가 지정에 실패했습니다. {(setExpert.error as Error).message}</Alert>
+        <Alert tone="error">
+          담당 전문가 지정에 실패했습니다. {(setExpert.error as Error).message}
+        </Alert>
+      )}
+
+      {setManager.isError && (
+        <Alert tone="error">
+          현장 담당자 지정에 실패했습니다. {(setManager.error as Error).message}
+        </Alert>
       )}
 
       {!locked && selectedIds.length > 0 && (
@@ -292,16 +372,14 @@ export function EventTablesPanel({
             {selectedIds.length}개 선택됨
           </span>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={clearSelected}>
-              선택 해제
-            </Button>
-            <Button
-              variant="danger"
+            <SectionActionButton onClick={clearSelected}>선택 해제</SectionActionButton>
+            <SectionActionButton
+              tone="danger"
               onClick={() => setDeleteTarget({ kind: 'bulk', ids: selectedIds })}
               loading={delMany.isPending}
             >
               선택 {selectedIds.length}개 삭제
-            </Button>
+            </SectionActionButton>
           </div>
         </div>
       )}
@@ -364,7 +442,7 @@ function ExpertSelect({
   currentTableId,
   disabled = false,
   ariaLabel,
-  className = 'rounded-lg border border-border bg-surface-raised px-2 py-1 text-sm text-neutral-base outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50',
+  className = 'h-7 rounded-md border border-border bg-surface-raised px-2 text-sm text-neutral-base outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50',
 }: {
   value: string;
   onChange: (participantId: string) => void;
@@ -391,6 +469,43 @@ function ExpertSelect({
       {selectable.map((e) => (
         <option key={e.row.id} value={e.row.id}>
           {e.user?.name ?? '(이름 미상)'}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * 현장 담당자 셀렉트(생성 폼·목록 행에서 동일 구조로 재사용).
+ * 후보는 이 행사에 배정된 오퍼레이터. 한 담당자가 여러 테이블을 맡을 수 있어 필터링하지 않는다.
+ */
+function ManagerSelect({
+  value,
+  onChange,
+  managers,
+  disabled = false,
+  ariaLabel,
+  className = 'h-7 rounded-md border border-border bg-surface-raised px-2 text-sm text-neutral-base outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50',
+}: {
+  value: string;
+  onChange: (userId: string) => void;
+  managers: ManagerOption[];
+  disabled?: boolean;
+  ariaLabel: string;
+  className?: string;
+}) {
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
+      className={className}
+    >
+      <option value="">미지정</option>
+      {managers.map((m) => (
+        <option key={m.userId} value={m.userId}>
+          {m.name}
         </option>
       ))}
     </select>

@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react';
+import { ChoiceChip } from '@/components/common/ChoiceChip';
 
 /**
  * 데이터 테이블 상단 도구 영역(8-C). 검색 입력 + 필터 칩/셀렉트를
  * 일관된 레이아웃으로 배치한다. 내용은 children 으로 주입.
  */
 export function FilterBar({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">{children}</div>
-  );
+  return <div className="flex flex-wrap items-center gap-2">{children}</div>;
 }
 
 export interface SearchInputProps {
@@ -34,7 +33,7 @@ export function SearchInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`w-full ${widthClass} rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30`}
+      className={`h-9 w-full ${widthClass} rounded-lg border border-border bg-white px-3 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30`}
     />
   );
 }
@@ -61,25 +60,20 @@ export function FilterChips<V extends string>({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className="inline-flex flex-wrap gap-1 rounded-lg border border-border bg-muted p-1"
+      className="inline-flex min-h-9 flex-wrap items-center gap-1 rounded-lg border border-border bg-muted p-1"
     >
       {options.map((opt) => {
         const active = opt.value === value;
         return (
-          <button
+          <ChoiceChip
             key={opt.value}
-            type="button"
             role="tab"
             aria-selected={active}
+            selected={active}
             onClick={() => onChange(opt.value)}
-            className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
-              active
-                ? 'bg-surface-raised text-brand shadow-sm'
-                : 'text-neutral-base/70 hover:text-neutral-base'
-            }`}
           >
             {opt.label}
-          </button>
+          </ChoiceChip>
         );
       })}
     </div>

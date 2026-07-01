@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Alert } from '@/components/common/Alert';
-import { Button } from '@/components/common/Button';
+import { SectionActionButton } from '@/components/common/ActionButton';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { DataTable } from '@/components/common/DataTable';
 import { SearchInput, FilterChips } from '@/components/common/FilterBar';
@@ -43,15 +43,9 @@ export function ParticipantDbView({ role }: ParticipantDbViewProps) {
   const [fileFilter, setFileFilter] = useState<FileFilter>('ALL');
   const [loginFilter, setLoginFilter] = useState<LoginFilter>('ALL');
 
-  const fieldNameById = useMemo(
-    () => new Map((fields ?? []).map((f) => [f.id, f.name])),
-    [fields],
-  );
+  const fieldNameById = useMemo(() => new Map((fields ?? []).map((f) => [f.id, f.name])), [fields]);
 
-  const roleUsers = useMemo(
-    () => (users ?? []).filter((u) => u.role === role),
-    [users, role],
-  );
+  const roleUsers = useMemo(() => (users ?? []).filter((u) => u.role === role), [users, role]);
 
   const existingEmails = useMemo(
     () => new Set((users ?? []).map((u) => u.email.toLowerCase())),
@@ -134,10 +128,12 @@ export function ParticipantDbView({ role }: ParticipantDbViewProps) {
         }
         actions={
           <>
-            <Button variant="outline" onClick={() => setCsvOpen(true)}>
+            <SectionActionButton onClick={() => setCsvOpen(true)}>
               CSV 일괄 업로드
-            </Button>
-            <Button onClick={() => setDetailOpen(true)}>+ 개별 추가</Button>
+            </SectionActionButton>
+            <SectionActionButton tone="primary" onClick={() => setDetailOpen(true)}>
+              + 개별 추가
+            </SectionActionButton>
           </>
         }
       />
