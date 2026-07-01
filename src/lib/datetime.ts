@@ -31,6 +31,11 @@ export function formatDateTime(iso: string, tz: string): string {
   return dayjs.utc(iso).tz(tz).format('YYYY.MM.DD HH:mm');
 }
 
+/** 날짜만 표기(행사 timezone 기준, 예: 2026-07-01) — 파일명 {date} 변수 등. */
+export function formatDate(iso: string, tz: string): string {
+  return dayjs.utc(iso).tz(tz).format('YYYY-MM-DD');
+}
+
 /**
  * 기간 표기. 같은 날이면 종료는 시각만(예: 2026.07.01 10:00 ~ 18:00),
  * 다른 날이면 양쪽 모두 날짜 포함.

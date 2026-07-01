@@ -21,7 +21,7 @@ import { CounselingReportPanel } from '@/components/admin/CounselingReportPanel'
 import { NotificationLogPanel } from '@/components/admin/NotificationLogPanel';
 import { EventNotificationSettingsPanel } from '@/components/admin/EventNotificationSettingsPanel';
 import { EventFormModal } from '@/components/admin/EventFormModal';
-import { PhotoStatusPanel } from '@/components/admin/PhotoStatusPanel';
+import { OperationsPanel } from '@/components/admin/OperationsPanel';
 import {
   useAssignableUsers,
   useEventDetail,
@@ -32,6 +32,7 @@ import {
 import { useEventExport } from '@/hooks/useEventExport';
 import { useMyEventRoles } from '@/hooks/useMyEventRoles';
 import { useEventOperators } from '@/hooks/useOperators';
+import { useGlobalNotificationSettings } from '@/hooks/useNotificationSettings';
 import { OPERATOR_PERMISSION_LABELS } from '@/lib/labels';
 import { canManageEvent, hasCapability, type EventCapability } from '@/lib/eventPermission';
 import { computeProgressStats } from '@/lib/booking';
@@ -47,13 +48,13 @@ type DetailTab =
   | 'counseling'
   | 'survey'
   | 'expert-survey'
-  | 'photos'
+  | 'operations'
   | 'notifications';
 
 /**
  * 행사 상세 탭 (8-E 재구성, page_admin_event_detail.md §1.2).
  * 순서: 참가 스타트업 → 참가 전문가 → 테이블 세팅 → 예약·강제조정 → 진행 현황
- *       → 상담일지 → 행사 만족도 → 전문가 만족도 → 증빙사진 → 행사알림.
+ *       → 상담일지 → 행사 만족도 → 전문가 만족도 → 운영관리 → 행사알림.
  * 운영형 탭(상담일지·만족도·알림)은 결과/현황을 기본으로 보여주고, 설정은 보조 영역에 둔다
  * (8-F 에서 우측 상단 버튼 + 모달로 전환 예정).
  */
@@ -66,7 +67,7 @@ const TABS: { value: DetailTab; label: string }[] = [
   { value: 'counseling', label: '상담일지' },
   { value: 'survey', label: '행사 만족도' },
   { value: 'expert-survey', label: '전문가 만족도' },
-  { value: 'photos', label: '증빙사진' },
+  { value: 'operations', label: '운영관리' },
   { value: 'notifications', label: '행사알림' },
 ];
 
@@ -85,7 +86,7 @@ const TAB_CAPABILITY: Record<DetailTab, EventCapability> = {
   counseling: 'view',
   survey: 'view',
   'expert-survey': 'view',
-  photos: 'staff',
+  operations: 'view',
   notifications: 'view',
 };
 
@@ -115,6 +116,9 @@ export function EventDetailView() {
   const myPermission = myRoles.permissionFor(eventId);
   // 이 행사에 권한을 받은 운영자 목록(전체 조회는 최고관리자 RLS 한정).
   const operatorsQ = useEventOperators(myRoles.isSuper ? eventId : null);
+  // 행사알림 탭 노출 여부(안내발송 관리의 임시 전역 스위치). 로딩 중/미설정이면 숨김.
+  const notifSettingsQ = useGlobalNotificationSettings();
+  const notificationTabEnabled = notifSettingsQ.data?.event_notification_tab_enabled ?? false;
 
   const [tab, setTab] = useState<DetailTab | null>(null);
   // 8-F: 결과 중심 탭의 설정은 우측 상단 버튼 → 모달로 연다.
@@ -161,7 +165,12 @@ export function EventDetailView() {
   const slots = slotsQ.data ?? [];
 
   // 권한별 노출 탭. 미달 탭은 숨기고, 선택/기본 탭이 가려지면 첫 노출 탭으로 대체.
-  const visibleTabs = TABS.filter((t) => hasCapability(myPermission, TAB_CAPABILITY[t.value]));
+  // 행사알림 탭은 전역 임시 스위치(안내발송 관리)가 ON 일 때만 추가로 노출한다.
+  const visibleTabs = TABS.filter(
+    (t) =>
+      hasCapability(myPermission, TAB_CAPABILITY[t.value]) &&
+      (t.value !== 'notifications' || notificationTabEnabled),
+  );
   const preferredTab = tab ?? defaultTab(event.status);
   const activeTab = visibleTabs.some((t) => t.value === preferredTab)
     ? preferredTab
@@ -341,12 +350,15 @@ export function EventDetailView() {
         />
       )}
 
-      {activeTab === 'photos' && (
-        <PhotoStatusPanel
+      {activeTab === 'operations' && (
+        <OperationsPanel
           eventId={eventId}
+          eventTitle={event.title}
+          eventStart={event.event_start}
+          timezone={event.timezone}
           participants={participants}
           userById={userById}
-          timezone={event.timezone}
+          satisfactionPolicy={event.satisfaction_policy}
         />
       )}
 

@@ -37,7 +37,12 @@ export function NotificationSettingsView() {
     formState: { isDirty, isSubmitting },
   } = useForm<GlobalNotificationSettingsInput>({
     resolver: zodResolver(globalNotificationSettingsSchema),
-    defaultValues: { provider: 'MOCK', dispatch_enabled: false, sender_phone: null },
+    defaultValues: {
+      provider: 'MOCK',
+      dispatch_enabled: false,
+      sender_phone: null,
+      event_notification_tab_enabled: false,
+    },
   });
 
   useEffect(() => {
@@ -46,6 +51,7 @@ export function NotificationSettingsView() {
         provider: settingQ.data.provider,
         dispatch_enabled: settingQ.data.dispatch_enabled,
         sender_phone: settingQ.data.sender_phone ?? null,
+        event_notification_tab_enabled: settingQ.data.event_notification_tab_enabled,
       });
     }
   }, [settingQ.data, reset]);
@@ -56,6 +62,7 @@ export function NotificationSettingsView() {
 
   const provider        = watch('provider');
   const dispatchEnabled = watch('dispatch_enabled');
+  const tabEnabled      = watch('event_notification_tab_enabled');
 
   const onSubmit = async (values: GlobalNotificationSettingsInput) => {
     await update.mutateAsync(values);
@@ -110,6 +117,25 @@ export function NotificationSettingsView() {
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
+          {/* 행사알림 탭 노출 (임시 전역 스위치) — 발송 로직과 무관한 UI 게이트. */}
+          <section className="flex flex-col gap-2">
+            <p className="text-sm font-semibold text-neutral-base">행사알림 탭 노출</p>
+            <p className="text-xs text-neutral-base/60">
+              행사 상세 화면의 <strong>행사알림</strong> 탭을 표시할지 여부입니다. 정식 기능 정리
+              전까지 임시로 노출을 제어합니다. OFF면 모든 관리자에게 해당 탭이 보이지 않습니다.
+            </p>
+            <label className="flex cursor-pointer items-center gap-2.5">
+              <input
+                type="checkbox"
+                {...register('event_notification_tab_enabled')}
+                className="size-4 accent-brand"
+              />
+              <span className="text-sm text-neutral-base">
+                행사알림 탭 노출 (현재: <strong>{tabEnabled ? 'ON' : 'OFF'}</strong>)
+              </span>
+            </label>
+          </section>
+
           {/* 실제 발송 활성화 */}
           <section className="flex flex-col gap-2">
             <p className="text-sm font-semibold text-neutral-base">실제 발송 활성화</p>

@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { Modal } from '@/components/common/Modal';
+import { useEffect, useRef, useState } from 'react';
 import { Alert } from '@/components/common/Alert';
 import { Button } from '@/components/common/Button';
 import { Spinner } from '@/components/common/Spinner';
@@ -21,6 +20,9 @@ import {
 import type { CounselingAnswerValue, CounselingDraft } from '@/lib/counseling';
 import type { CounselingQuestion } from '@/types/counselingLog';
 import type { MatchingSlotRow } from '@/types/eventDetail';
+
+/** 입력을 멈춘 뒤 자동 임시저장까지의 대기(ms). */
+const AUTOSAVE_DEBOUNCE_MS = 5000;
 
 /** 1~5 평점 선택(큰 터치 영역, 라디오 그룹). */
 function RatingField({
@@ -174,66 +176,119 @@ function QuestionField({
   );
 }
 
+/** 자동저장 상태 표시. */
+type SaveState =
+  | { kind: 'idle' }
+  | { kind: 'saving' }
+  | { kind: 'saved' }
+  | { kind: 'error'; message: string };
+
 /**
- * 디지털 상담일지 작성 모달 (docs/counseling_log_customization.md §7).
- * 행사별 동적 문항(RATING/객관식/주관식) + 후속 연계 + 공개 여부 메타 필드.
- * 임시저장(save_counseling_log_draft_v2)과 최종 제출(submit_counseling_log_v2)을 분리한다.
+ * 디지털 상담일지 작성 폼 (Split View 우측 패널 · docs/expert_dashboard_split_view_ideation.md §3③).
+ * CounselingLogModal 의 본문을 인라인화한 자립형 폼. 행사별 동적 문항(RATING/객관식/주관식)과
+ * 후속 연계·공개 여부 메타 필드를 직접 관리하고, 임시저장(자동/수동)·최종 제출 RPC 를 호출한다.
+ *
+ * 자동 임시저장(§3③): 입력을 멈춘 지 5초가 지나거나(디바운스) 포커스가 폼 밖으로 나갈 때
+ * 백그라운드로 save_counseling_log_draft_v2 를 호출한다. WAITING/IN_PROGRESS 세션에서만 동작.
  */
-export function CounselingLogModal({
-  open,
+export function CounselingLogForm({
   slot,
-  startupName,
   eventId,
-  onClose,
+  onSubmitted,
 }: {
-  open: boolean;
-  slot: MatchingSlotRow | null;
-  startupName: string;
+  slot: MatchingSlotRow;
   eventId: string;
-  onClose: () => void;
+  /** 최종 제출 성공 콜백(워크스페이스에서 다음 액션 처리). */
+  onSubmitted?: () => void;
 }) {
-  const slotId = slot?.id ?? '';
-  const questionsQ = useCounselingLogQuestions(eventId, open);
-  const logQ = useCounselingLog(slotId, open);
+  const slotId = slot.id;
+  const questionsQ = useCounselingLogQuestions(eventId, true);
+  const logQ = useCounselingLog(slotId, true);
   const saveM = useSaveCounselingDraft(eventId);
   const submitM = useSubmitCounselingLog(eventId);
 
   const [draft, setDraft] = useState<CounselingDraft>(emptyDraft);
   const [seeded, setSeeded] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' });
 
   const questions = questionsQ.data ?? [];
   const loading = questionsQ.isLoading || logQ.isLoading;
 
-  // 모달이 열리고 문항·기존 로그 조회가 끝나면 폼을 1회 시드한다.
-  useEffect(() => {
-    if (!open) {
-      setSeeded(false);
-      setFormError(null);
-      return;
-    }
-    if (seeded || loading) return;
-    setDraft(
-      draftFromLog(questionsQ.data ?? [], logQ.data?.log ?? null, logQ.data?.answers ?? []),
-    );
-    setSeeded(true);
-  }, [open, seeded, loading, questionsQ.data, logQ.data]);
-
-  if (!open || !slot) return null;
-
   // 진짜 "제출됨" 여부는 세션 완료로 판정한다(임시저장 행도 submitted_at 기본값이 채워지므로).
   const alreadySubmitted = slot.session_status === 'COMPLETED';
-  const setAnswer = (qid: string, next: CounselingAnswerValue) =>
+  // 임시저장 RPC 는 대기/진행 세션만 허용 — 자동저장도 동일 조건에서만 동작시킨다.
+  const autosaveEnabled =
+    slot.session_status === 'WAITING' || slot.session_status === 'IN_PROGRESS';
+
+  // 더티 추적 + 디바운스 타이머. 슬롯이 바뀌면 시드를 다시 한다.
+  const dirtyRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 슬롯 전환 시 시드 초기화.
+  useEffect(() => {
+    setSeeded(false);
+    setFormError(null);
+    setSaveState({ kind: 'idle' });
+    dirtyRef.current = false;
+  }, [slotId]);
+
+  // 문항·기존 로그 조회가 끝나면 폼을 1회 시드한다.
+  useEffect(() => {
+    if (seeded || loading) return;
+    setDraft(draftFromLog(questionsQ.data ?? [], logQ.data?.log ?? null, logQ.data?.answers ?? []));
+    setSeeded(true);
+  }, [seeded, loading, questionsQ.data, logQ.data]);
+
+  const runAutosave = () => {
+    if (!autosaveEnabled || !dirtyRef.current || saveM.isPending) return;
+    dirtyRef.current = false;
+    setSaveState({ kind: 'saving' });
+    saveM.mutate(
+      { slotId, questions, draft },
+      {
+        onSuccess: () => setSaveState({ kind: 'saved' }),
+        onError: (e) => setSaveState({ kind: 'error', message: (e as Error).message }),
+      },
+    );
+  };
+
+  // 디바운스 자동저장: draft 가 바뀔 때마다 타이머를 재설정한다.
+  useEffect(() => {
+    if (!seeded || !autosaveEnabled || !dirtyRef.current) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(runAutosave, AUTOSAVE_DEBOUNCE_MS);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+    // draft 변경마다 타이머 재설정. runAutosave 는 최신 클로저로 재생성된다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, seeded, autosaveEnabled]);
+
+  const markDirty = () => {
+    dirtyRef.current = true;
+    if (saveState.kind !== 'saving') setSaveState({ kind: 'idle' });
+  };
+
+  const setAnswer = (qid: string, next: CounselingAnswerValue) => {
+    markDirty();
     setDraft((d) => ({ ...d, answers: { ...d.answers, [qid]: next } }));
+  };
 
   const mutationError =
-    (saveM.isError && (saveM.error as Error).message) ||
-    (submitM.isError && (submitM.error as Error).message) ||
-    null;
+    (submitM.isError && (submitM.error as Error).message) || null;
 
-  const handleSave = () => {
+  const handleManualSave = () => {
     setFormError(null);
-    saveM.mutate({ slotId, questions, draft });
+    dirtyRef.current = false;
+    setSaveState({ kind: 'saving' });
+    saveM.mutate(
+      { slotId, questions, draft },
+      {
+        onSuccess: () => setSaveState({ kind: 'saved' }),
+        onError: (e) => setSaveState({ kind: 'error', message: (e as Error).message }),
+      },
+    );
   };
 
   const handleSubmit = () => {
@@ -243,30 +298,21 @@ export function CounselingLogModal({
       setFormError(result.message);
       return;
     }
-    submitM.mutate({ slotId, questions, draft }, { onSuccess: onClose });
+    submitM.mutate({ slotId, questions, draft }, { onSuccess: () => onSubmitted?.() });
   };
 
+  if (loading) {
+    return (
+      <div className="flex justify-center py-10">
+        <Spinner className="h-6 w-6" />
+      </div>
+    );
+  }
+
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={`상담일지 · ${startupName}`}
-      footer={
-        <>
-          <Button variant="outline" onClick={handleSave} loading={saveM.isPending}>
-            임시저장
-          </Button>
-          <Button onClick={handleSubmit} loading={submitM.isPending}>
-            상담 완료 및 제출
-          </Button>
-        </>
-      }
-    >
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <Spinner className="h-6 w-6" />
-        </div>
-      ) : (
+    // 포커스가 폼 밖으로 나갈 때(다른 입력 창 이동 등) 즉시 자동저장(§3③).
+    <div className="flex h-full flex-col" onBlur={runAutosave}>
+      <div className="flex-1 overflow-y-auto px-4 py-4">
         <div className="flex flex-col gap-5">
           {alreadySubmitted && (
             <Alert tone="info">
@@ -276,7 +322,9 @@ export function CounselingLogModal({
           )}
 
           {questionsQ.isError && (
-            <Alert tone="error">상담일지 문항을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
+            <Alert tone="error">
+              상담일지 문항을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.
+            </Alert>
           )}
 
           {/* 동적 평가 문항 */}
@@ -302,7 +350,10 @@ export function CounselingLogModal({
               <Toggle
                 label="후속 연계 요청"
                 checked={draft.followUpRequired}
-                onChange={(next) => setDraft((d) => ({ ...d, followUpRequired: next }))}
+                onChange={(next) => {
+                  markDirty();
+                  setDraft((d) => ({ ...d, followUpRequired: next }));
+                }}
               />
             </div>
             {draft.followUpRequired && (
@@ -311,7 +362,10 @@ export function CounselingLogModal({
                   rows={2}
                   maxLength={FOLLOWUP_MEMO_MAX}
                   value={draft.followUpMemo}
-                  onChange={(e) => setDraft((d) => ({ ...d, followUpMemo: e.target.value }))}
+                  onChange={(e) => {
+                    markDirty();
+                    setDraft((d) => ({ ...d, followUpMemo: e.target.value }));
+                  }}
                   placeholder="추가 매칭 필요 사유·메모"
                   className="w-full rounded-lg border border-border bg-white px-3 py-2 text-base text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
                 />
@@ -333,13 +387,56 @@ export function CounselingLogModal({
             <Toggle
               label="상담 의견 스타트업 공개"
               checked={draft.isPublic}
-              onChange={(next) => setDraft((d) => ({ ...d, isPublic: next }))}
+              onChange={(next) => {
+                markDirty();
+                setDraft((d) => ({ ...d, isPublic: next }));
+              }}
             />
           </section>
 
           {(formError || mutationError) && <Alert tone="error">{formError ?? mutationError}</Alert>}
         </div>
-      )}
-    </Modal>
+      </div>
+
+      {/* 하단 고정 액션 바: 자동저장 상태 + 임시저장/제출 */}
+      <div className="flex items-center justify-between gap-2 border-t border-border bg-surface px-4 py-3">
+        <AutosaveIndicator state={saveState} enabled={autosaveEnabled} />
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="md"
+            onClick={handleManualSave}
+            loading={saveM.isPending}
+            disabled={!autosaveEnabled}
+          >
+            임시저장
+          </Button>
+          <Button size="md" onClick={handleSubmit} loading={submitM.isPending}>
+            상담 완료 및 제출
+          </Button>
+        </div>
+      </div>
+    </div>
   );
+}
+
+/** 자동저장 상태 텍스트(좌하단). */
+function AutosaveIndicator({ state, enabled }: { state: SaveState; enabled: boolean }) {
+  if (!enabled) {
+    return <span className="text-xs text-neutral-base/45">자동저장 비활성 (대기/진행 세션만)</span>;
+  }
+  switch (state.kind) {
+    case 'saving':
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs text-neutral-base/60">
+          <Spinner className="h-3 w-3" /> 자동 저장 중…
+        </span>
+      );
+    case 'saved':
+      return <span className="text-xs text-success">✓ 저장됨</span>;
+    case 'error':
+      return <span className="text-xs text-brand">저장 실패: {state.message}</span>;
+    default:
+      return <span className="text-xs text-neutral-base/45">입력을 멈추면 자동 저장됩니다</span>;
+  }
 }

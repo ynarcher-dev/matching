@@ -4,6 +4,7 @@ export const globalNotificationSettingsSchema = z.object({
   provider: z.enum(['MOCK', 'SOLAPI']),
   dispatch_enabled: z.boolean(),
   sender_phone: z.string().trim().nullable().optional(),
+  event_notification_tab_enabled: z.boolean(),
 });
 
 export type GlobalNotificationSettingsInput = z.infer<typeof globalNotificationSettingsSchema>;

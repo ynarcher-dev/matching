@@ -70,6 +70,8 @@ export interface MatchingSlotRow {
   table_id: string | null;
   booking_type: BookingType;
   session_status: SessionStatus;
+  /** 스타트업이 입력한 상담 희망사항(0066). 전문가 Split View [요청] 탭에서 노출. 미선택 쿼리에서는 undefined. */
+  counseling_request?: string | null;
 }
 
 /** 예약 현황 통계(BOOKING 위젯, page_admin_event_detail.md §2.2). */

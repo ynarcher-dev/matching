@@ -11,8 +11,12 @@ export interface SlotStartup {
   companyName: string | null;
   representativeName: string | null;
   description: string | null;
+  /** 스타트업 참고 URL(홈페이지·웹 IR 등). Split View 좌측 [링크] 탭 노출. */
+  homepage: string | null;
   /** 사업소개서 PDF 의 Storage 객체 경로(`proposals/...`). Signed URL 로만 열람. */
   proposalFileUrl: string | null;
+  /** 사업소개서 원본 파일명(users.proposal_file_name, 0068). 없으면 null. */
+  proposalFileName: string | null;
 }
 
 /** counseling_logs 한 행 (db_schema §2.9). 임시저장 시 점수는 NULL 가능. */

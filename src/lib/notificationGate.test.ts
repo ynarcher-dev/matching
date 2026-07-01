@@ -12,6 +12,7 @@ const makeGlobal = (
   provider_configured_at: null,
   last_tested_at: null,
   last_test_status: null,
+  event_notification_tab_enabled: false,
   updated_by: null,
   updated_at: '2026-06-28T00:00:00Z',
   ...overrides,

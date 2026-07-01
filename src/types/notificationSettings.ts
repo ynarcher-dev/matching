@@ -16,6 +16,8 @@ export interface NotificationSettings {
   provider_configured_at: string | null;
   last_tested_at: string | null;
   last_test_status: 'SUCCESS' | 'FAILED' | null;
+  /** 행사 상세 '행사알림' 탭 노출 여부(임시 전역 스위치). */
+  event_notification_tab_enabled: boolean;
   updated_by: string | null;
   updated_at: string;
 }

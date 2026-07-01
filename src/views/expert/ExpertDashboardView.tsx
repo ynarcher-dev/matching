@@ -4,18 +4,15 @@ import { Alert } from '@/components/common/Alert';
 import { FullScreenLoader } from '@/components/common/FullScreenLoader';
 import { Tabs } from '@/components/common/Tabs';
 import { EventStatusBadge } from '@/components/admin/EventStatusBadge';
-import { ActiveSessionCard } from '@/components/expert/ActiveSessionCard';
-import { ExpertScheduleList } from '@/components/expert/ExpertScheduleList';
-import { CounselingLogModal } from '@/components/expert/CounselingLogModal';
+import { ExpertScheduleTable } from '@/components/expert/ExpertScheduleTable';
+import { ExpertCounselingWorkspace } from '@/components/expert/ExpertCounselingWorkspace';
 import { useAuthStore } from '@/stores/authStore';
 import { displayName } from '@/lib/labels';
 import { formatRange } from '@/lib/datetime';
-import { latestAttendanceMap, attendanceStatusFor } from '@/lib/attendance';
+import { latestAttendanceMap } from '@/lib/attendance';
 import { pickActiveSlotId } from '@/lib/expertSchedule';
 import {
   useExpertAttendance,
-  useExpertCheckIn,
-  useExpertClearAttendance,
   useExpertTableCodes,
   useMyExpertEvents,
   useMyExpertSlots,
@@ -23,11 +20,12 @@ import {
   useStartCounseling,
 } from '@/hooks/useExpertPortal';
 import type { EventRow } from '@/types/event';
-import type { MatchingSlotRow } from '@/types/eventDetail';
 
 /**
- * 전문가 메인 대시보드 (docs/page_expert_dashboard.md §1).
- * 프로필 + 행사 스위처 + 진행 중 세션 강조 카드(카운트다운·출석·상담 시작) + 전체 일정 리스트.
+ * 전문가 메인 대시보드 (docs/expert_dashboard_split_view_ideation.md).
+ * 기본 뷰: 프로필 + 행사 스위처 + 전체 상담 일정 표(관리자 DataTable 스타일).
+ * 일정의 기업을 열면 화면이 Split View 워크스페이스(좌 기업정보 ↔ 우 상담일지)로 전환된다.
+ * 복잡한 카운트다운·수동 출석 카드는 제거하고, 출석은 상담 시작 시 자동 처리한다(§4).
  * 전문가도 참가자 커스텀 JWT 경로이므로 모든 쿼리/RPC 는 participantClient 를 쓴다.
  */
 export function ExpertDashboardView() {
@@ -36,12 +34,11 @@ export function ExpertDashboardView() {
 
   const eventsQ = useMyExpertEvents();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** 워크스페이스(Split View)로 연 슬롯. null 이면 일정 표(기본 뷰). */
+  const [workspaceSlotId, setWorkspaceSlotId] = useState<string | null>(null);
 
   const events = useMemo(() => eventsQ.data ?? [], [eventsQ.data]);
-  const tabOptions = useMemo(
-    () => events.map((e) => ({ value: e.id, label: e.title })),
-    [events],
-  );
+  const tabOptions = useMemo(() => events.map((e) => ({ value: e.id, label: e.title })), [events]);
   // 기본 선택: 진행(PROGRESS) 행사 우선, 없으면 첫 행사.
   const event = useMemo<EventRow | undefined>(() => {
     if (selectedId) return events.find((e) => e.id === selectedId) ?? events[0];
@@ -70,19 +67,7 @@ export function ExpertDashboardView() {
   );
 
   const startM = useStartCounseling(eventId);
-  const checkInM = useExpertCheckIn(eventId);
-  const clearM = useExpertClearAttendance(eventId);
-  const attendancePending = checkInM.isPending || clearM.isPending;
-
   const activeSlotId = useMemo(() => pickActiveSlotId(slots, Date.now()), [slots]);
-  const activeSlot = slots.find((s) => s.id === activeSlotId) ?? null;
-
-  const [logTarget, setLogTarget] = useState<MatchingSlotRow | null>(null);
-  const logStartupName = logTarget?.startup_id
-    ? (startupById.get(logTarget.startup_id)?.companyName ??
-      startupById.get(logTarget.startup_id)?.name ??
-      '스타트업')
-    : '스타트업';
 
   if (eventsQ.isLoading) return <FullScreenLoader />;
   if (eventsQ.isError) {
@@ -106,6 +91,26 @@ export function ExpertDashboardView() {
 
   const inProgress = event.status === 'PROGRESS';
 
+  // 워크스페이스 모드: Split View 로 일정 하나를 연 상태.
+  const workspaceSlot = workspaceSlotId ? slots.find((s) => s.id === workspaceSlotId) : null;
+  if (workspaceSlotId && workspaceSlot) {
+    return (
+      <ExpertCounselingWorkspace
+        slots={slots}
+        currentSlotId={workspaceSlotId}
+        startupById={startupById}
+        timezone={event.timezone}
+        eventId={eventId}
+        inProgress={inProgress}
+        onBack={() => setWorkspaceSlotId(null)}
+        onStart={(slotId) => startM.mutate(slotId)}
+        startPending={startM.isPending}
+        startError={startM.isError ? (startM.error as Error).message : null}
+        onRefreshStartups={() => startupsQ.refetch()}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {/* 전문가 프로필 카드 */}
@@ -114,13 +119,7 @@ export function ExpertDashboardView() {
         <p className="text-sm text-neutral-base/70">오늘의 상담 일정을 확인하고 진행하세요.</p>
       </Card>
 
-      {events.length > 1 && (
-        <Tabs
-          value={eventId}
-          options={tabOptions}
-          onChange={setSelectedId}
-        />
-      )}
+      {events.length > 1 && <Tabs value={eventId} options={tabOptions} onChange={setSelectedId} />}
 
       <Card className="flex flex-col gap-2 p-5">
         <div className="flex flex-wrap items-center gap-2">
@@ -132,7 +131,7 @@ export function ExpertDashboardView() {
         </p>
         {!inProgress && (
           <Alert tone="info">
-            진행(PROGRESS) 단계에서 상담 시작·출석 처리를 할 수 있습니다. 현재는 일정만 확인할 수 있습니다.
+            진행(PROGRESS) 단계에서 상담 시작·일지 작성을 할 수 있습니다. 현재는 일정과 기업 자료만 확인할 수 있습니다.
           </Alert>
         )}
       </Card>
@@ -141,51 +140,18 @@ export function ExpertDashboardView() {
         <Alert tone="error">일부 데이터를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
       )}
 
-      {inProgress && activeSlot && (
-        <ActiveSessionCard
-          slot={activeSlot}
-          startup={activeSlot.startup_id ? startupById.get(activeSlot.startup_id) : undefined}
-          tableCode={tableCodeById.get(activeSlot.table_id ?? '')}
+      <Card className="flex flex-col gap-3 p-5">
+        <h2 className="text-base font-bold text-neutral-base">전체 상담 일정</h2>
+        <ExpertScheduleTable
+          slots={slots}
+          startupById={startupById}
+          tableCodeById={tableCodeById}
+          attendanceMap={attendanceMap}
+          activeSlotId={activeSlotId}
           timezone={event.timezone}
-          expertId={myId}
-          expertAttendance={attendanceStatusFor(attendanceMap, activeSlot.id, myId)}
-          startupAttendance={attendanceStatusFor(attendanceMap, activeSlot.id, activeSlot.startup_id)}
-          onSetAttendance={(p) =>
-            checkInM.mutate({
-              slotId: p.slotId,
-              userId: p.userId,
-              roleType: p.roleType,
-              status: p.status,
-            })
-          }
-          onClearAttendance={(p) =>
-            clearM.mutate({ slotId: p.slotId, userId: p.userId, roleType: p.roleType })
-          }
-          attendancePending={attendancePending}
-          onStart={(slotId) => startM.mutate(slotId)}
-          startPending={startM.isPending}
-          startError={startM.isError ? (startM.error as Error).message : null}
-          onWriteLog={(s) => setLogTarget(s)}
+          onOpen={(s) => setWorkspaceSlotId(s.id)}
         />
-      )}
-
-      <ExpertScheduleList
-        slots={slots}
-        startupById={startupById}
-        tableCodeById={tableCodeById}
-        attendanceMap={attendanceMap}
-        activeSlotId={activeSlotId}
-        timezone={event.timezone}
-        onWriteLog={inProgress ? (s) => setLogTarget(s) : undefined}
-      />
-
-      <CounselingLogModal
-        open={Boolean(logTarget)}
-        slot={logTarget}
-        startupName={logStartupName}
-        eventId={eventId}
-        onClose={() => setLogTarget(null)}
-      />
+      </Card>
     </div>
   );
 }

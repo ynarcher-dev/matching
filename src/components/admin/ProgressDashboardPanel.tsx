@@ -20,7 +20,8 @@ import { useEventOperators } from '@/hooks/useOperators';
 import { useEventCompanyPhotos } from '@/hooks/useCompanyPhotos';
 import { computeProgressStats } from '@/lib/booking';
 import { participantLabel, SESSION_STATUS_TONE } from '@/lib/labels';
-import { BADGE_TONE } from '@/lib/tone';
+import { Badge } from '@/components/common/Badge';
+import type { Tone } from '@/lib/tone';
 import type {
   AssignableUser,
   EventParticipantRow,
@@ -186,10 +187,10 @@ export function ProgressDashboardPanel({
 
       <Card className="flex flex-col gap-4 p-5">
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
-          <Legend className={BADGE_TONE[SESSION_STATUS_TONE.WAITING]} label="대기중" />
-          <Legend className={BADGE_TONE[SESSION_STATUS_TONE.IN_PROGRESS]} label="진행중" />
-          <Legend className={BADGE_TONE[SESSION_STATUS_TONE.COMPLETED]} label="완료" />
-          <Legend className={BADGE_TONE[SESSION_STATUS_TONE.NO_SHOW]} label="노쇼" />
+          <Legend tone={SESSION_STATUS_TONE.WAITING} label="대기중" />
+          <Legend tone={SESSION_STATUS_TONE.IN_PROGRESS} label="진행중" />
+          <Legend tone={SESSION_STATUS_TONE.COMPLETED} label="완료" />
+          <Legend tone={SESSION_STATUS_TONE.NO_SHOW} label="노쇼" />
           <span className="ml-1 text-neutral-base/50">
             · 셀 색은 진행 상태입니다. 각 셀에서 대기중/진행중/완료를 직접 전환하면 출석이 자동 처리되고(진행·완료=출석, 노쇼=불참), 노쇼는 사유 버튼으로, 전문가 상담일지는 별도로 제출됩니다. 셀 하단 📷 버튼으로 증빙사진을 바로 등록·검수합니다.
           </span>
@@ -299,12 +300,10 @@ export function ProgressDashboardPanel({
   );
 }
 
-function Legend({ className, label }: { className: string; label: string }) {
+function Legend({ tone, label }: { tone: Tone; label: string }) {
   return (
-    <span className="inline-flex items-center gap-1 text-neutral-base/70">
-      <span className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold ${className}`}>
-        {label}
-      </span>
-    </span>
+    <Badge tone={tone} size="11">
+      {label}
+    </Badge>
   );
 }

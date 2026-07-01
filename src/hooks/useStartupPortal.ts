@@ -29,6 +29,7 @@ export const portalKeys = {
   tables: (eventId: string) => ['portal', 'tables', eventId] as const,
   slots: (eventId: string) => ['portal', 'slots', eventId] as const,
   proposal: (userId: string) => ['portal', 'proposal', userId] as const,
+  homepage: (userId: string) => ['portal', 'homepage', userId] as const,
   avatars: (eventId: string, cacheKey: string) =>
     ['portal', 'avatars', eventId, cacheKey] as const,
 };
@@ -264,7 +265,7 @@ export function useEventSlots(eventId: string, opts?: { refetchInterval?: number
       const { data, error } = await participantClient
         .from('matching_slots')
         .select(
-          'id,event_id,expert_id,startup_id,start_time,end_time,table_id,booking_type,session_status',
+          'id,event_id,expert_id,startup_id,start_time,end_time,table_id,booking_type,session_status,counseling_request',
         )
         .eq('event_id', eventId)
         .order('start_time', { ascending: true })
@@ -319,5 +320,51 @@ export function useCancelBooking(eventId: string) {
       if (error) throw rpcError(error);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: portalKeys.slots(eventId) }),
+  });
+}
+
+/** 상담 희망사항 저장 — set_counseling_request RPC(본인 예약 슬롯, 0066). */
+export function useSetCounselingRequest(eventId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ slotId, request }: { slotId: string; request: string }) => {
+      const { error } = await participantClient.rpc('set_counseling_request', {
+        p_slot_id: slotId,
+        p_request: request,
+      });
+      if (error) throw rpcError(error);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: portalKeys.slots(eventId) }),
+  });
+}
+
+/** 스타트업 본인 참고 URL(company_homepage, RLS users_select 허용). */
+export function useMyHomepage(userId: string) {
+  return useQuery<string | null>({
+    queryKey: portalKeys.homepage(userId),
+    enabled: Boolean(userId),
+    queryFn: async () => {
+      const { data, error } = await participantClient
+        .from('users')
+        .select('company_homepage')
+        .eq('id', userId)
+        .maybeSingle<{ company_homepage: string | null }>();
+      if (error) throw error;
+      return data?.company_homepage ?? null;
+    },
+  });
+}
+
+/** 스타트업 본인 참고 URL 저장 — set_my_company_homepage RPC(0066). */
+export function useSetMyHomepage(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (homepage: string) => {
+      const { error } = await participantClient.rpc('set_my_company_homepage', {
+        p_homepage: homepage,
+      });
+      if (error) throw rpcError(error);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: portalKeys.homepage(userId) }),
   });
 }

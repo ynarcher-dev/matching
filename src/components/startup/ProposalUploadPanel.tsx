@@ -1,11 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { Button } from '@/components/common/Button';
 import { participantClient } from '@/lib/participantClient';
 import { BUCKET_SPEC, createSignedUrlWithClient, validateParticipantFile } from '@/lib/storage';
 import { formatDateTime } from '@/lib/datetime';
-import { useMyProposal, useSetMyProposal } from '@/hooks/useStartupPortal';
+import {
+  useMyHomepage,
+  useMyProposal,
+  useSetMyHomepage,
+  useSetMyProposal,
+} from '@/hooks/useStartupPortal';
 
 interface ProposalUploadPanelProps {
   /** 스타트업 본인 user_id. */
@@ -143,6 +148,67 @@ export function ProposalUploadPanel({ userId, timezone }: ProposalUploadPanelPro
 
       {localError && <p className="text-sm font-medium text-brand">{localError}</p>}
       {mutationError && <p className="text-sm font-medium text-brand">{mutationError}</p>}
+
+      {/* 참고 URL(홈페이지·웹 IR) — 전문가 Split View [링크] 탭에 노출(§3②). */}
+      <HomepageField userId={userId} />
     </Card>
+  );
+}
+
+/** 참고 URL(company_homepage) 입력 필드. 본인 값으로 시드하고 변경 시에만 저장 활성화. */
+function HomepageField({ userId }: { userId: string }) {
+  const homepageQ = useMyHomepage(userId);
+  const setM = useSetMyHomepage(userId);
+
+  const [value, setValue] = useState('');
+  const [justSaved, setJustSaved] = useState(false);
+  const initial = homepageQ.data ?? '';
+
+  // 조회가 끝나면 입력값을 1회 시드(이후 사용자 편집 보존).
+  useEffect(() => {
+    if (homepageQ.isSuccess) setValue(homepageQ.data ?? '');
+  }, [homepageQ.isSuccess, homepageQ.data]);
+
+  const dirty = value.trim() !== initial.trim();
+  const error = setM.isError ? (setM.error as Error).message : null;
+
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-semibold text-neutral-base">
+          참고 URL{' '}
+          <span className="font-normal text-neutral-base/55">(소개 홈페이지·노션·웹 IR 등)</span>
+        </label>
+        {justSaved && !dirty && <span className="text-xs text-success">✓ 저장됨</span>}
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input
+          type="url"
+          inputMode="url"
+          maxLength={255}
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setJustSaved(false);
+          }}
+          placeholder="https://example.com"
+          className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-neutral-base outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/30"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          className="shrink-0"
+          disabled={!dirty}
+          loading={setM.isPending}
+          onClick={() => {
+            setM.mutate(value.trim());
+            setJustSaved(true);
+          }}
+        >
+          저장
+        </Button>
+      </div>
+      {error && <p className="text-sm font-medium text-brand">{error}</p>}
+    </div>
   );
 }

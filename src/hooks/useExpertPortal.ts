@@ -81,7 +81,7 @@ export function useMyExpertSlots(eventId: string, myId: string) {
       const { data, error } = await participantClient
         .from('matching_slots')
         .select(
-          'id,event_id,expert_id,startup_id,start_time,end_time,table_id,booking_type,session_status',
+          'id,event_id,expert_id,startup_id,start_time,end_time,table_id,booking_type,session_status,counseling_request',
         )
         .eq('event_id', eventId)
         .eq('expert_id', myId)
@@ -99,7 +99,9 @@ interface StartupUserRow {
   company_name: string | null;
   representative_name: string | null;
   company_description: string | null;
+  company_homepage: string | null;
   proposal_file_url: string | null;
+  proposal_file_name: string | null;
 }
 
 /** 내 슬롯에 배정된 스타트업 요약(id→SlotStartup). RLS 가 co-participant SELECT 로 허용. */
@@ -111,7 +113,9 @@ export function useSlotStartups(eventId: string, startupIds: string[]) {
     queryFn: async () => {
       const { data, error } = await participantClient
         .from('users')
-        .select('id,name,company_name,representative_name,company_description,proposal_file_url')
+        .select(
+          'id,name,company_name,representative_name,company_description,company_homepage,proposal_file_url,proposal_file_name',
+        )
         .in('id', startupIds)
         .returns<StartupUserRow[]>();
       if (error) throw error;
@@ -124,7 +128,9 @@ export function useSlotStartups(eventId: string, startupIds: string[]) {
             companyName: u.company_name,
             representativeName: u.representative_name,
             description: u.company_description,
+            homepage: u.company_homepage,
             proposalFileUrl: u.proposal_file_url,
+            proposalFileName: u.proposal_file_name,
           } satisfies SlotStartup,
         ]),
       );

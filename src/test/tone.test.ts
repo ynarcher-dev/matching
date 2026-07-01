@@ -36,10 +36,16 @@ describe('tone map (9-A 디자인 토큰)', () => {
     }
   });
 
-  it('BADGE_TONE 배경은 흰색으로 통일하고 tone 은 border/text 로 구분한다', () => {
-    for (const tone of ALL_TONES) {
-      expect(BADGE_TONE[tone]).toContain('bg-white');
-    }
+  it('BADGE_TONE 은 각 톤에 부합하는 표면(surface) 배경과 border/text 를 가진다', () => {
+    expect(BADGE_TONE.brand).toContain('bg-brand/5');
+    expect(BADGE_TONE.neutral).toContain('bg-surface');
+    expect(BADGE_TONE.muted).toContain('bg-muted/50');
+    expect(BADGE_TONE.success).toContain('bg-success-surface');
+    expect(BADGE_TONE.warning).toContain('bg-warning-surface');
+    expect(BADGE_TONE.danger).toContain('bg-danger-surface');
+    expect(BADGE_TONE.info).toContain('bg-info-surface');
+    expect(BADGE_TONE.ai).toContain('bg-ai-surface');
+
     expect(BADGE_TONE.success).toContain('border-success-border');
     expect(BADGE_TONE.warning).toContain('border-warning-border');
     expect(BADGE_TONE.danger).toContain('border-danger-border');

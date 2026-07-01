@@ -164,9 +164,11 @@ export function StartupPortalView() {
         expertById={expertById}
         tableCodeById={tableCodeById}
         myId={myId}
+        eventId={eventId}
         maxSessions={event.max_sessions_per_startup}
         timezone={event.timezone}
         canModify={modifiable}
+        requestEditable={!finished}
         onChange={(slot) => setChangeFrom(slot)}
         onCancel={(slot) => setCancelTarget(slot)}
       />

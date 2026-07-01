@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Badge } from '@/components/common/Badge';
 import { buildBookingSchedule } from '@/lib/booking';
 import { formatDateTime } from '@/lib/datetime';
-import { BADGE_TONE, SOLID_TONE, type Tone } from '@/lib/tone';
+import { BADGE_TONE, type Tone } from '@/lib/tone';
 import {
   companyName,
   SESSION_STATUS_LABELS,
@@ -66,18 +67,6 @@ const SESSION_CELL_TINT: Record<SessionStatus, string> = {
   CANCELLED: 'bg-muted',
 };
 
-/**
- * 세션 진행 상태 배지 색 = SESSION_STATUS_TONE 의 읽기용(BADGE_TONE) 변형.
- * 범례·진행 버튼과 같은 tone 을 공유한다(대기/진행/완료/노쇼 = 같은 색).
- */
-const STATUS_TONE: Record<SessionStatus, string> = {
-  WAITING: BADGE_TONE[SESSION_STATUS_TONE.WAITING],
-  IN_PROGRESS: BADGE_TONE[SESSION_STATUS_TONE.IN_PROGRESS],
-  COMPLETED: BADGE_TONE[SESSION_STATUS_TONE.COMPLETED],
-  NO_SHOW: BADGE_TONE[SESSION_STATUS_TONE.NO_SHOW],
-  CANCELLED: `${BADGE_TONE[SESSION_STATUS_TONE.CANCELLED]} line-through`,
-};
-
 interface ExpertRow {
   expertId: string;
   name: string;
@@ -124,6 +113,24 @@ export function TimeGridSheet({
     return m;
   }, [slots]);
 
+  // 현재 진행 중인 시간대 열을 강조(진한 테두리)하기 위한 시계. 1분마다 갱신.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  /** now 가 [start, end) 안에 드는 열의 start_time(없으면 null). 셀 테두리 강조용. */
+  const currentColumn = useMemo(() => {
+    for (const c of columns) {
+      const start = new Date(c).getTime();
+      const end = endByStart.get(c);
+      const endMs = end ? new Date(end).getTime() : start + 50 * 60 * 1000;
+      if (now >= start && now < endMs) return c;
+    }
+    return null;
+  }, [columns, endByStart, now]);
+
   const tableCodeById = useMemo(
     () => new Map(tables.map((t) => [t.id, t.table_code])),
     [tables],
@@ -160,19 +167,27 @@ export function TimeGridSheet({
   }
 
   return (
-    <div className="w-fit max-w-full overflow-x-auto rounded-xl border border-border">
-      <table className="border-collapse text-left text-sm">
+    // 바깥: 둥근 모서리·테두리·overflow-hidden 으로 모양을 잡아 스크롤바가 모서리를 사각으로 덮지 않게 한다.
+    <div className="w-fit max-w-full overflow-hidden rounded-xl border border-border">
+      {/* 안쪽: 실제 가로·세로 스크롤 담당. */}
+      <div className="max-h-[calc(100vh-220px)] overflow-auto">
+        <table className="border-collapse text-left text-sm">
         <thead>
-          <tr className="border-b-2 border-border bg-surface text-neutral-base">
-            <th className="sticky left-0 z-10 w-44 whitespace-nowrap border-r border-border bg-surface px-3 py-2.5 font-bold">
+          <tr className="sticky top-0 z-20 border-b-2 border-border bg-surface text-neutral-base">
+            <th className="sticky left-0 z-30 w-44 min-w-44 whitespace-nowrap border-r border-border bg-surface px-3 py-2.5 font-bold">
               테이블 · 전문가
             </th>
             {columns.map((c) => {
               const end = endByStart.get(c);
+              const isCurrent = c === currentColumn;
               return (
                 <th
                   key={c}
-                  className="w-[150px] whitespace-nowrap border-r border-border px-1 py-2 text-center font-bold last:border-r-0"
+                  className={`w-[150px] min-w-[150px] whitespace-nowrap bg-surface px-1 py-2 text-center font-bold ${
+                    isCurrent
+                      ? 'border-x-2 border-t-2 border-brand'
+                      : 'border-r border-border last:border-r-0'
+                  }`}
                 >
                   <span className="block text-sm text-neutral-base">
                     {formatDateTime(c, timezone).slice(-5)}
@@ -188,11 +203,12 @@ export function TimeGridSheet({
           </tr>
         </thead>
         <tbody>
-          {expertRows.map((row) => {
+          {expertRows.map((row, rowIdx) => {
             const cells = byExpert.get(row.expertId);
+            const isLastRow = rowIdx === expertRows.length - 1;
             return (
               <tr key={row.expertId} className="border-b border-border last:border-b-0">
-                <th className="sticky left-0 z-10 w-44 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-top">
+                <th className="sticky left-0 z-10 w-44 min-w-44 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle">
                   <span className="inline-block rounded bg-neutral-base px-2 py-0.5 text-xs font-bold text-white">
                     {row.tableCode}
                   </span>
@@ -216,10 +232,19 @@ export function TimeGridSheet({
                 </th>
                 {columns.map((c) => {
                   const slot = cells?.get(c);
+                  // 빈 칸/빈 슬롯은 셀 세로 가운데 정렬, 예약된 칸은 위 정렬.
+                  const isEmpty = !slot || !slot.startup_id;
+                  const isCurrent = c === currentColumn;
                   return (
                     <td
                       key={c}
-                      className="w-[150px] border-r border-border p-1 align-top last:border-r-0"
+                      className={`w-[150px] min-w-[150px] p-1 ${
+                        isEmpty ? 'align-middle' : 'align-top'
+                      } ${
+                        isCurrent
+                          ? `border-x-2 border-brand ${isLastRow ? 'border-b-2' : ''}`
+                          : 'border-r border-border last:border-r-0'
+                      }`}
                     >
                       <GridCell
                         slot={slot}
@@ -239,8 +264,9 @@ export function TimeGridSheet({
               </tr>
             );
           })}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -272,7 +298,7 @@ function TableManagerField({
 
   if (!tableId) {
     return (
-      <p className="mt-2 text-[10px] font-medium text-neutral-base/40">
+      <p className="mt-3 border-t border-border pt-3 text-left text-xs font-medium text-neutral-base/40">
         담당자: 테이블 미지정
       </p>
     );
@@ -280,22 +306,22 @@ function TableManagerField({
 
   if (!canManage) {
     return (
-      <p className="mt-2 flex items-center gap-1 text-[10px] font-medium text-neutral-base/60">
-        <span className="text-neutral-base/45">담당자</span>
-        <span className="font-bold text-neutral-base/80">{managerName ?? '미지정'}</span>
-      </p>
+      <div className="mt-3 border-t border-border pt-3 text-left">
+        <span className="mb-0.5 block text-xs font-semibold text-neutral-base/55">현장 담당자</span>
+        <span className="block text-sm font-bold text-neutral-base/80">{managerName ?? '미지정'}</span>
+      </div>
     );
   }
 
   return (
-    <label className="mt-2 block">
-      <span className="mb-0.5 block text-[10px] font-semibold text-neutral-base/45">현장 담당자</span>
+    <label className="mt-3 block border-t border-border pt-3 text-left">
+      <span className="mb-1 block text-xs font-semibold text-neutral-base/55">현장 담당자</span>
       <select
         value={managerId ?? ''}
         disabled={disabled}
         onChange={(e) => onSetManager(tableId, e.target.value || null)}
         aria-label="테이블 현장 담당자"
-        className="w-full rounded-md border border-border bg-surface-raised px-1.5 py-1 text-[11px] font-medium text-neutral-base outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50"
+        className="w-full rounded-md border border-border bg-surface-raised px-2 py-1.5 text-sm font-medium text-neutral-base outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 disabled:opacity-50"
       >
         <option value="">미지정</option>
         {operators.map((o) => (
@@ -340,7 +366,7 @@ function GridCell({
   }
   if (!slot.startup_id) {
     return (
-      <span className={`block py-2 text-center text-xs text-neutral-base/35 ${photoFilter ? 'opacity-25' : ''}`}>
+      <span className={`block text-center text-xs text-neutral-base/35 ${photoFilter ? 'opacity-25' : ''}`}>
         빈 슬롯
       </span>
     );
@@ -358,14 +384,16 @@ function GridCell({
     <div
       className={`flex flex-col gap-1 rounded-md px-1 py-1.5 transition-opacity ${SESSION_CELL_TINT[slot.session_status]} ${
         dimmed ? 'opacity-25' : ''
-      } ${needsPhoto ? 'ring-2 ring-warning' : ''}`}
+      } ${needsPhoto ? 'ring-2 ring-[#000000]' : ''}`}
     >
       <div className="flex justify-center">
-        <span
-          className={`inline-block rounded-md px-1.5 py-0.5 text-[10px] font-bold ${STATUS_TONE[slot.session_status]}`}
+        <Badge
+          tone={SESSION_STATUS_TONE[slot.session_status]}
+          size="11"
+          className={slot.session_status === 'CANCELLED' ? 'line-through' : ''}
         >
           {SESSION_STATUS_LABELS[slot.session_status]}
-        </span>
+        </Badge>
       </div>
 
       <div className="text-center leading-tight">
@@ -373,8 +401,13 @@ function GridCell({
           {startup ? companyName(startup) : '(알 수 없음)'}
         </p>
         {startup?.representative_name && (
-          <p className="break-keep text-[10px] text-neutral-base/60">
+          <p className="break-keep text-xs text-neutral-base">
             {startup.representative_name}
+          </p>
+        )}
+        {startup?.phone_number && (
+          <p className="break-keep text-[11px] text-neutral-base/70">
+            {startup.phone_number}
           </p>
         )}
       </div>
@@ -419,14 +452,17 @@ function GridCell({
           type="button"
           disabled={locked || pending}
           onClick={() => onReplaceNoShow(slot)}
-          className="rounded-md border border-info-border bg-info-surface px-1 py-1 text-[10px] font-bold text-info transition-colors hover:brightness-95 disabled:opacity-50"
+          className={`rounded-md border px-1 py-1 text-[10px] font-bold transition-colors hover:brightness-95 disabled:opacity-50 ${BADGE_TONE.danger}`}
         >
           현장 대체 매칭
         </button>
       )}
 
-      {/* 증빙사진 통합(ideation §3): 셀에서 바로 업로드/검수 모달을 연다. 사진은 (행사×스타트업) 단위. */}
-      <PhotoCellButton count={photoCount} onClick={() => onOpenPhotos(slot)} />
+      {/* 증빙사진 통합(ideation §3): 셀에서 바로 업로드/검수 모달을 연다. 사진은 (행사×스타트업) 단위.
+          노쇼 셀은 증빙 대상이 아니므로 사진 버튼을 숨긴다. */}
+      {status !== 'NO_SHOW' && (
+        <PhotoCellButton count={photoCount} onClick={() => onOpenPhotos(slot)} />
+      )}
     </div>
   );
 }
@@ -466,7 +502,7 @@ function CameraIcon() {
   );
 }
 
-/** 진행 상태 2×2 그리드의 단일 버튼(활성=tone 채움, 비활성=흰색 outline). */
+/** 진행 상태 2×2 그리드의 단일 버튼(활성=태그 tone 칩+ring, 비활성=흰색 outline). */
 function StatusButton({
   label,
   tone,
@@ -486,10 +522,10 @@ function StatusButton({
       aria-pressed={active}
       disabled={disabled || active}
       onClick={onClick}
-      className={`rounded-md px-1 py-1 text-[10px] font-bold transition-colors disabled:cursor-default ${
+      className={`rounded-md border px-1 py-1 text-[10px] font-bold transition-colors disabled:cursor-default ${
         active
-          ? SOLID_TONE[tone]
-          : 'border border-border bg-surface-raised text-neutral-base/70 hover:bg-surface disabled:opacity-50'
+          ? `${BADGE_TONE[tone]} ring-1 ring-inset ring-current`
+          : 'border-border bg-surface-raised text-neutral-base/70 hover:bg-surface disabled:opacity-50'
       }`}
     >
       {label}

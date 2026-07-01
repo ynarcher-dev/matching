@@ -26,6 +26,8 @@ export interface DataTableProps<T> {
   /** 가로 스크롤 최소 너비 클래스(예: 'min-w-[1080px]'). */
   minWidthClass?: string;
   onRowClick?: (row: T) => void;
+  /** 행별 추가 클래스(상태 강조 등). 기본 행 스타일 뒤에 덧붙는다. */
+  rowClassName?: (row: T) => string;
 }
 
 const ALIGN_CLASS: Record<NonNullable<DataTableColumn<unknown>['align']>, string> = {
@@ -50,6 +52,7 @@ export function DataTable<T>({
   emptyMessage = '표시할 데이터가 없습니다.',
   minWidthClass = '',
   onRowClick,
+  rowClassName,
 }: DataTableProps<T>) {
   const colSpan = columns.length;
 
@@ -88,7 +91,7 @@ export function DataTable<T>({
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={`border-b border-border last:border-b-0 hover:bg-surface/60 ${
                   onRowClick ? 'cursor-pointer' : ''
-                }`}
+                } ${rowClassName?.(row) ?? ''}`}
               >
                 {columns.map((col) => (
                   <td
