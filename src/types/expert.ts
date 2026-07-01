@@ -4,6 +4,14 @@
  * 전문가도 OTP 커스텀 JWT 경로이므로 조회/RPC 는 participantClient 를 쓴다.
  */
 
+/** 스타트업이 등록한 참고 URL 링크 1건(company_links, 0073). */
+export interface StartupLink {
+  id: string;
+  url: string;
+  /** 부연설명(선택). 없으면 null. */
+  label: string | null;
+}
+
 /** 활성 세션 카드에 노출할 스타트업 요약(users 일부, RLS 가 co-participant 로 허용). */
 export interface SlotStartup {
   id: string;
@@ -11,8 +19,10 @@ export interface SlotStartup {
   companyName: string | null;
   representativeName: string | null;
   description: string | null;
-  /** 스타트업 참고 URL(홈페이지·웹 IR 등). Split View 좌측 [링크] 탭 노출. */
+  /** 대표 참고 URL(company_homepage=첫 링크). 하위호환용. */
   homepage: string | null;
+  /** 스타트업 참고 URL 전체(url+부연설명). Split View 좌측 [링크] 탭 노출. */
+  links: StartupLink[];
   /** 사업소개서 PDF 의 Storage 객체 경로(`proposals/...`). Signed URL 로만 열람. */
   proposalFileUrl: string | null;
   /** 사업소개서 원본 파일명(users.proposal_file_name, 0068). 없으면 null. */

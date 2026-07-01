@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Badge } from '@/components/common/Badge';
+import { TableTag } from '@/components/common/TableTag';
 import { formatDateTime } from '@/lib/datetime';
 import { cellStateOf, isMine, slotsByExpert } from '@/lib/startupBooking';
 import type { CellState } from '@/lib/startupBooking';
@@ -88,9 +89,7 @@ export function ExpertBookingList({
                   {expert.position && (
                     <span className="text-sm text-neutral-base/70">{expert.position}</span>
                   )}
-                  <Badge tone="neutral">
-                    {tableCode}
-                  </Badge>
+                  <TableTag code={tableCode} />
                   {bookedByMe && (
                     <Badge tone="success">
                       예약함
@@ -135,7 +134,7 @@ export function ExpertBookingList({
               {expertSlots.length === 0 ? (
                 <p className="text-xs text-neutral-base/50">공개된 상담 시간대가 없습니다.</p>
               ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-1.5">
                   {expertSlots.map((slot) => {
                     const state = cellStateOf(
                       slot,

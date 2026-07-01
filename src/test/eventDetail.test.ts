@@ -221,6 +221,7 @@ describe('participantLabel', () => {
     expert_description: null,
     field_ids: [],
     proposal_file_url: null,
+    profile_image_url: null,
     last_login_at: null,
     created_at: '',
   };
@@ -240,6 +241,7 @@ describe('participantLabel', () => {
     expert_description: null,
     field_ids: [],
     proposal_file_url: null,
+    profile_image_url: null,
     last_login_at: null,
     created_at: '',
   };

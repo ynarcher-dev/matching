@@ -102,6 +102,8 @@ interface StartupUserRow {
   company_homepage: string | null;
   proposal_file_url: string | null;
   proposal_file_name: string | null;
+  /** 참고 URL 링크(company_links 임베드, created_at 순). RLS co-participant SELECT(0074). */
+  company_links: { id: string; url: string; label: string | null; created_at: string }[] | null;
 }
 
 /** 내 슬롯에 배정된 스타트업 요약(id→SlotStartup). RLS 가 co-participant SELECT 로 허용. */
@@ -114,7 +116,7 @@ export function useSlotStartups(eventId: string, startupIds: string[]) {
       const { data, error } = await participantClient
         .from('users')
         .select(
-          'id,name,company_name,representative_name,company_description,company_homepage,proposal_file_url,proposal_file_name',
+          'id,name,company_name,representative_name,company_description,company_homepage,proposal_file_url,proposal_file_name,company_links(id,url,label,created_at)',
         )
         .in('id', startupIds)
         .returns<StartupUserRow[]>();
@@ -129,6 +131,10 @@ export function useSlotStartups(eventId: string, startupIds: string[]) {
             representativeName: u.representative_name,
             description: u.company_description,
             homepage: u.company_homepage,
+            links: (u.company_links ?? [])
+              .slice()
+              .sort((a, b) => a.created_at.localeCompare(b.created_at))
+              .map((l) => ({ id: l.id, url: l.url, label: l.label })),
             proposalFileUrl: u.proposal_file_url,
             proposalFileName: u.proposal_file_name,
           } satisfies SlotStartup,
@@ -316,109 +322,22 @@ export function useSubmitCounselingLog(eventId: string) {
   });
 }
 
-/** 이전 상담 이력 한 건(완료 슬롯 + 일지 + 동적 문항/답변 + 행사/스타트업 메타). */
-export interface ExpertHistoryItem {
-  slot: MatchingSlotRow;
-  eventTitle: string;
-  eventTimezone: string;
-  startupName: string;
-  log: CounselingLogRow | null;
-  questions: CounselingQuestion[];
-  answers: CounselingAnswerRow[];
-}
-
 /**
- * 내 완료(COMPLETED) 상담 이력 (docs/page_expert_dashboard.md §3 — 이전 상담 이력).
- * 슬롯 → 일지·행사·스타트업을 병합한다(전 행사 통합, 최신순).
+ * 상담일지 제출 취소 — reopen_counseling_log_v2 RPC(COMPLETED → IN_PROGRESS).
+ * 작성 내용은 보존하고 세션만 진행 중으로 되돌려 재편집/재제출을 가능하게 한다.
  */
-export function useExpertHistory(myId: string) {
-  return useQuery<ExpertHistoryItem[]>({
-    queryKey: ['expert', 'history', myId],
-    enabled: Boolean(myId),
-    queryFn: async () => {
-      const { data: slots, error } = await participantClient
-        .from('matching_slots')
-        .select(
-          'id,event_id,expert_id,startup_id,start_time,end_time,table_id,booking_type,session_status',
-        )
-        .eq('expert_id', myId)
-        .eq('session_status', 'COMPLETED')
-        .order('start_time', { ascending: false })
-        .returns<MatchingSlotRow[]>();
-      if (error) throw error;
-      const rows = slots ?? [];
-      if (rows.length === 0) return [];
-
-      const slotIds = rows.map((s) => s.id);
-      const startupIds = Array.from(
-        new Set(rows.map((s) => s.startup_id).filter((v): v is string => Boolean(v))),
-      );
-      const eventIds = Array.from(new Set(rows.map((s) => s.event_id)));
-
-      const [logsRes, usersRes, eventsRes, questionsRes] = await Promise.all([
-        participantClient
-          .from('counseling_logs')
-          .select(
-            'id,matching_slot_id,score_technology,score_expertise,score_reliability,' +
-              'score_collaboration,score_probability,content,follow_up_required,follow_up_memo,' +
-              'is_public,submitted_at,updated_at,' +
-              'counseling_log_answers(question_id,answer_text,answer_rating,answer_selections)',
-          )
-          .in('matching_slot_id', slotIds)
-          .returns<(CounselingLogRow & { counseling_log_answers: CounselingAnswerRow[] | null })[]>(),
-        startupIds.length > 0
-          ? participantClient
-              .from('users')
-              .select('id,name,company_name')
-              .in('id', startupIds)
-              .returns<{ id: string; name: string; company_name: string | null }[]>()
-          : Promise.resolve({ data: [], error: null }),
-        participantClient
-          .from('events')
-          .select('id,title,timezone')
-          .in('id', eventIds)
-          .returns<{ id: string; title: string; timezone: string }[]>(),
-        participantClient
-          .from('counseling_log_questions')
-          .select('id,event_id,question_type,title,description,options,is_required,order_no,system_key')
-          .in('event_id', eventIds)
-          .order('order_no', { ascending: true })
-          .returns<CounselingQuestion[]>(),
-      ]);
-      if (logsRes.error) throw logsRes.error;
-      if (usersRes.error) throw usersRes.error;
-      if (eventsRes.error) throw eventsRes.error;
-      if (questionsRes.error) throw questionsRes.error;
-
-      const logBySlot = new Map(
-        (logsRes.data ?? []).map((row) => {
-          const { counseling_log_answers, ...log } = row;
-          return [log.matching_slot_id, { log, answers: counseling_log_answers ?? [] }];
-        }),
-      );
-      const userById = new Map((usersRes.data ?? []).map((u) => [u.id, u]));
-      const eventById = new Map((eventsRes.data ?? []).map((e) => [e.id, e]));
-      const questionsByEvent = new Map<string, CounselingQuestion[]>();
-      for (const q of questionsRes.data ?? []) {
-        const list = questionsByEvent.get(q.event_id) ?? [];
-        list.push(q);
-        questionsByEvent.set(q.event_id, list);
-      }
-
-      return rows.map((slot) => {
-        const ev = eventById.get(slot.event_id);
-        const su = slot.startup_id ? userById.get(slot.startup_id) : undefined;
-        const bundle = logBySlot.get(slot.id);
-        return {
-          slot,
-          eventTitle: ev?.title ?? '(행사)',
-          eventTimezone: ev?.timezone ?? 'Asia/Seoul',
-          startupName: su?.company_name ?? su?.name ?? '(스타트업)',
-          log: bundle?.log ?? null,
-          questions: questionsByEvent.get(slot.event_id) ?? [],
-          answers: bundle?.answers ?? [],
-        } satisfies ExpertHistoryItem;
+export function useReopenCounselingLog(eventId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (slotId: string) => {
+      const { error } = await participantClient.rpc('reopen_counseling_log_v2', {
+        p_slot_id: slotId,
       });
+      if (error) throw rpcError(error);
+    },
+    onSuccess: (_d, slotId) => {
+      qc.invalidateQueries({ queryKey: expertKeys.log(slotId) });
+      qc.invalidateQueries({ queryKey: expertKeys.slots(eventId) });
     },
   });
 }

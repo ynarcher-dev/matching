@@ -3,15 +3,13 @@ import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { FullScreenLoader } from '@/components/common/FullScreenLoader';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
-import { Tabs } from '@/components/common/Tabs';
-import { EventStatusBadge } from '@/components/admin/EventStatusBadge';
+import { StartupEventHeader } from '@/components/startup/StartupEventHeader';
 import { MyBookingList } from '@/components/startup/MyBookingList';
 import { BookingSlotsGrid } from '@/components/startup/BookingSlotsGrid';
 import { ChangeBookingModal } from '@/components/startup/ChangeBookingModal';
 import { SatisfactionPanel } from '@/components/startup/SatisfactionPanel';
 import { ExpertSatisfactionPanel } from '@/components/startup/ExpertSatisfactionPanel';
 import { PublicCommentsPanel } from '@/components/startup/PublicCommentsPanel';
-import { ProposalUploadPanel } from '@/components/startup/ProposalUploadPanel';
 import { useAuthStore } from '@/stores/authStore';
 import { formatRange } from '@/lib/datetime';
 import {
@@ -23,7 +21,8 @@ import {
   useEventSlots,
   useEventTableCodes,
   useExpertAvatars,
-  useMyEvents,
+  useSelectedStartupEvent,
+  type EventTableInfo,
 } from '@/hooks/useStartupPortal';
 import type { EventRow } from '@/types/event';
 import type { MatchingSlotRow } from '@/types/eventDetail';
@@ -46,19 +45,7 @@ export function StartupPortalView() {
   const user = useAuthStore((s) => s.user);
   const myId = user?.id ?? '';
 
-  const eventsQ = useMyEvents();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const events = useMemo(() => eventsQ.data ?? [], [eventsQ.data]);
-  const tabOptions = useMemo(
-    () => events.map((e) => ({ value: e.id, label: e.title })),
-    [events],
-  );
-  const event = useMemo(
-    () => events.find((e) => e.id === selectedId) ?? events[0],
-    [events, selectedId],
-  );
-  const eventId = event?.id ?? '';
+  const { eventsQ, events, event, eventId, setSelectedId } = useSelectedStartupEvent();
 
   const expertsQ = useEventExperts(eventId);
   const slotsQ = useEventSlots(eventId, { refetchInterval: PORTAL_POLL_MS });
@@ -70,7 +57,15 @@ export function StartupPortalView() {
     () => new Map<string, PortalExpert>(experts.map((e) => [e.userId, e])),
     [experts],
   );
-  const tableCodeById = tablesQ.data ?? new Map<string, string>();
+  // 상세 위치(description)까지 담은 리치 맵. 그리드 하위 컴포넌트에는 코드 문자열 맵으로 파생해 전달.
+  const tableInfoById = useMemo(
+    () => tablesQ.data ?? new Map<string, EventTableInfo>(),
+    [tablesQ.data],
+  );
+  const tableCodeById = useMemo(
+    () => new Map<string, string>([...tableInfoById].map(([id, v]) => [id, v.code])),
+    [tableInfoById],
+  );
   const avatarsQ = useExpertAvatars(eventId, experts);
   const avatarUrls = avatarsQ.data ?? new Map<string, string>();
 
@@ -126,49 +121,20 @@ export function StartupPortalView() {
 
   return (
     <div className="flex flex-col gap-5">
-      {events.length > 1 && (
-        <Tabs
-          value={eventId}
-          options={tabOptions}
-          onChange={setSelectedId}
-        />
-      )}
-
-      <Card className="flex flex-col gap-2 p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-lg font-bold text-neutral-base">{event.title}</h1>
-          <EventStatusBadge status={event.status} />
-        </div>
-        <p className="text-sm text-neutral-base/80">
-          행사: {formatRange(event.event_start, event.event_end, event.timezone)}
-        </p>
-        <p className="text-sm text-neutral-base/80">
-          예약 기간: {formatRange(event.booking_start, event.booking_end, event.timezone)}
-        </p>
-        {!modifiable && (
-          <Alert tone="info">
-            현재 단계에서는 예약을 직접 변경·취소할 수 없습니다. 변경이 필요하면 운영진에게 문의해 주세요.
-          </Alert>
-        )}
-      </Card>
+      <StartupEventHeader events={events} event={event} onSelect={setSelectedId} />
 
       {(expertsQ.isError || slotsQ.isError || tablesQ.isError) && (
         <Alert tone="error">일부 데이터를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
       )}
 
-      {/* 8-H: 종료 전 단계에서 본인 IR/소개서 직접 업로드. 사용자 단위(행사 무관) 자료라 항상 노출. */}
-      {!finished && myId && <ProposalUploadPanel userId={myId} timezone={event.timezone} />}
-
       <MyBookingList
         slots={slots}
         expertById={expertById}
-        tableCodeById={tableCodeById}
+        tableInfoById={tableInfoById}
         myId={myId}
-        eventId={eventId}
         maxSessions={event.max_sessions_per_startup}
         timezone={event.timezone}
         canModify={modifiable}
-        requestEditable={!finished}
         onChange={(slot) => setChangeFrom(slot)}
         onCancel={(slot) => setCancelTarget(slot)}
       />
@@ -193,6 +159,8 @@ export function StartupPortalView() {
           timezone={event.timezone}
           canBook={bookable}
           onBook={(slot) => setBookTarget(slot)}
+          onRefresh={() => slotsQ.refetch()}
+          refreshing={slotsQ.isFetching}
         />
       )}
 

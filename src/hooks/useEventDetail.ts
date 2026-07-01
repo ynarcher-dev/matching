@@ -85,7 +85,7 @@ export function useEventSlots(eventId: string, opts?: { refetchInterval?: number
       const { data, error } = await supabase
         .from('matching_slots')
         .select(
-          'id,event_id,expert_id,startup_id,start_time,end_time,table_id,booking_type,session_status',
+          'id,event_id,expert_id,startup_id,start_time,end_time,table_id,booking_type,session_status,counseling_request',
         )
         .eq('event_id', eventId)
         .order('start_time', { ascending: true })
@@ -112,7 +112,7 @@ export function useAssignableUsers() {
             'id,name,role,company_name,representative_name,contact_name,company_homepage,' +
               'expert_organization,expert_position,' +
               'email,phone_number,company_description,expert_description,proposal_file_url,' +
-              'last_login_at,created_at',
+              'profile_image_url,last_login_at,created_at',
           )
           .is('deleted_at', null)
           .in('role', ['EXPERT', 'STARTUP'])

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/common/Badge';
+import { FieldTags } from '@/components/common/FieldTags';
+import { TableTag } from '@/components/common/TableTag';
 import { CompactTagButton } from '@/components/common/Tag';
 import { buildBookingSchedule } from '@/lib/booking';
 import { formatDateTime } from '@/lib/datetime';
@@ -18,6 +20,8 @@ interface TimeGridSheetProps {
   participants: EventParticipantRow[];
   tables: EventTable[];
   userById: Map<string, AssignableUser>;
+  /** field_id → 분야명. 전문가 행 소속 아래 분야 태그 표시용. */
+  fieldNameById: Map<string, string>;
   timezone: string;
   locked: boolean;
   /** 상태/노쇼 mutation 진행 중 — 셀 버튼 비활성. */
@@ -37,10 +41,14 @@ interface TimeGridSheetProps {
   photoFilter: boolean;
   /** 셀 📷 버튼 클릭 → 해당 스타트업 증빙사진 업로드/검수 모달 오픈. */
   onOpenPhotos: (slot: MatchingSlotRow) => void;
+  /** 셀 기업 정보 클릭 → 상담 신청 상세(희망사항·첨부·링크) 모달 오픈. */
+  onOpenDetail: (slot: MatchingSlotRow) => void;
   /** 담당자 이름 해석용 오퍼레이터 목록(user_id → 이름). 배정은 테이블 설정에서 한다. */
   operators: TableManagerOption[];
   /** table_id → 현재 담당자 user_id(없으면 null). 1열 담당자 이름 표시용(읽기전용). */
   managerByTable: Map<string, string | null>;
+  /** 크게보기: 표를 가로 전체로 늘려 화면을 꽉 채운다(열이 남은 폭을 나눠 갖는다). */
+  fillWidth?: boolean;
 }
 
 /** 1열 담당자 셀렉트 옵션(행사 배정 오퍼레이터). */
@@ -65,6 +73,7 @@ interface ExpertRow {
   expertId: string;
   name: string;
   org: string | null;
+  fields: string[];
   tableCode: string;
   /** 이 전문가의 기본 테이블 id. 담당자 배정 대상(없으면 null=배정 불가). */
   tableId: string | null;
@@ -81,6 +90,7 @@ export function TimeGridSheet({
   participants,
   tables,
   userById,
+  fieldNameById,
   timezone,
   locked,
   pending,
@@ -90,8 +100,10 @@ export function TimeGridSheet({
   photoCountByStartup,
   photoFilter,
   onOpenPhotos,
+  onOpenDetail,
   operators,
   managerByTable,
+  fillWidth = false,
 }: TimeGridSheetProps) {
   const { columns, byExpert } = useMemo(() => buildBookingSchedule(slots), [slots]);
 
@@ -136,6 +148,9 @@ export function TimeGridSheet({
         expertId,
         name: u?.name ?? '(알 수 없는 전문가)',
         org: u?.expert_organization ?? null,
+        fields: (u?.field_ids ?? [])
+          .map((id) => fieldNameById.get(id))
+          .filter((v): v is string => Boolean(v)),
         tableCode: tid ? (tableCodeById.get(tid) ?? '미지정') : '미지정',
         tableId: tid,
       };
@@ -143,7 +158,7 @@ export function TimeGridSheet({
     return rows.sort(
       (a, b) => a.tableCode.localeCompare(b.tableCode, 'ko') || a.name.localeCompare(b.name, 'ko'),
     );
-  }, [byExpert, userById, defaultTableByExpert, tableCodeById]);
+  }, [byExpert, userById, fieldNameById, defaultTableByExpert, tableCodeById]);
 
   if (columns.length === 0) {
     return (
@@ -155,10 +170,17 @@ export function TimeGridSheet({
 
   return (
     // 바깥: 둥근 모서리·테두리·overflow-hidden 으로 모양을 잡아 스크롤바가 모서리를 사각으로 덮지 않게 한다.
-    <div className="w-fit max-w-full overflow-hidden rounded-xl border border-border">
-      {/* 안쪽: 실제 가로·세로 스크롤 담당. */}
-      <div className="max-h-[calc(100vh-220px)] overflow-auto">
-        <table className="border-collapse text-left text-sm">
+    // fillWidth(크게보기): 스크롤 영역을 화면 폭·높이로 넓힌다. 셀 크기는 그대로 두고,
+    //   내용이 넓으면 가로 스크롤되게 한다(표 자체를 늘리지 않는다).
+    <div
+      className={`overflow-hidden rounded-xl border border-border ${
+        fillWidth ? 'w-full flex-1 min-h-0' : 'w-fit max-w-full'
+      }`}
+    >
+      {/* 안쪽: 실제 가로·세로 스크롤 담당. fillWidth 면 부모(카드) 남은 높이를 h-full 로 꽉 채우고,
+          표보다 넓은 남는 영역은 회색(bg-surface)으로 채운다(표 자체는 흰색 bg-surface-raised). */}
+      <div className={`overflow-auto ${fillWidth ? 'h-full bg-surface' : 'max-h-[calc(100vh-220px)]'}`}>
+        <table className={`border-collapse text-left text-sm ${fillWidth ? 'bg-surface-raised' : ''}`}>
           <thead>
             <tr className="sticky top-0 z-20 border-b-2 border-border bg-surface text-neutral-base">
               <th className="sticky left-0 z-30 w-44 min-w-44 whitespace-nowrap border-r border-border bg-surface px-3 py-2.5 font-bold">
@@ -195,18 +217,17 @@ export function TimeGridSheet({
               const isLastRow = rowIdx === expertRows.length - 1;
               return (
                 <tr key={row.expertId} className="border-b border-border last:border-b-0">
-                  <th className="sticky left-0 z-10 w-44 min-w-44 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle">
-                    <span className="inline-block rounded bg-neutral-base px-2 py-0.5 text-xs font-bold text-white">
-                      {row.tableCode}
-                    </span>
-                    <span className="mt-1 block text-sm font-bold text-neutral-base">
-                      {row.name}
+                  <th className="sticky left-0 z-10 w-56 min-w-56 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle">
+                    <span className="flex items-center gap-1.5">
+                      <TableTag code={row.tableCode} />
+                      <span className="text-sm font-bold text-neutral-base">{row.name}</span>
                     </span>
                     {row.org && (
-                      <span className="block text-xs font-medium text-neutral-base/70">
+                      <span className="mt-0.5 block text-xs font-medium text-neutral-base/70">
                         {row.org}
                       </span>
                     )}
+                    <FieldTags names={row.fields} className="mt-1" />
                     {/* 테이블 현장 담당자(오퍼레이터) — 1열 하단 읽기전용 표시. 배정은 테이블 설정에서. */}
                     <TableManagerField
                       tableId={row.tableId}
@@ -243,6 +264,7 @@ export function TimeGridSheet({
                           onSetSessionStatus={onSetSessionStatus}
                           onReplaceNoShow={onReplaceNoShow}
                           onOpenPhotos={onOpenPhotos}
+                          onOpenDetail={onOpenDetail}
                         />
                       </td>
                     );
@@ -304,6 +326,7 @@ function GridCell({
   onSetSessionStatus,
   onReplaceNoShow,
   onOpenPhotos,
+  onOpenDetail,
 }: {
   slot: MatchingSlotRow | undefined;
   userById: Map<string, AssignableUser>;
@@ -318,6 +341,7 @@ function GridCell({
   ) => void;
   onReplaceNoShow: (slot: MatchingSlotRow) => void;
   onOpenPhotos: (slot: MatchingSlotRow) => void;
+  onOpenDetail: (slot: MatchingSlotRow) => void;
 }) {
   // 사진 필터 켜짐: 사진과 무관한 칸(빈 칸/빈 슬롯)은 흐리게 처리해 미등록 셀을 부각한다.
   if (!slot) {
@@ -361,7 +385,13 @@ function GridCell({
         </Badge>
       </div>
 
-      <div className="text-center leading-tight">
+      {/* 기업 정보 클릭 → 상담 신청 상세(희망사항·첨부·링크) 모달. */}
+      <button
+        type="button"
+        onClick={() => onOpenDetail(slot)}
+        title="상담 신청 상세 보기"
+        className="rounded-md border border-transparent px-1 py-0.5 text-center leading-tight outline-none transition-colors hover:border-brand hover:bg-danger-surface focus-visible:ring-2 focus-visible:ring-brand"
+      >
         <p className="break-keep text-xs font-bold text-neutral-base">
           {startup ? companyName(startup) : '(알 수 없음)'}
         </p>
@@ -371,7 +401,7 @@ function GridCell({
         {startup?.phone_number && (
           <p className="break-keep text-[11px] text-neutral-base/70">{startup.phone_number}</p>
         )}
-      </div>
+      </button>
 
       {/* 진행 상태 직접 제어(대기/진행/완료/노쇼) — 2×2 동일 크기 버튼. 관리자가 자유 전환.
           출석은 별도 마킹 없이 상태 전환에 따라 백엔드가 자동 동기화한다(ideation §1). */}

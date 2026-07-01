@@ -41,6 +41,10 @@ export interface RosterUser {
   contact_name: string | null;
   expert_organization: string | null;
   expert_position: string | null;
+  /** 스타트업 참고 URL(홈페이지·웹 IR). 명단 "참고링크" 열. 없으면 null. */
+  company_homepage: string | null;
+  /** 스타트업 사업소개서 PDF 의 Storage 객체 경로. 명단 "소개서 첨부" 열(O/X 판정). 없으면 null. */
+  proposal_file_url: string | null;
 }
 
 /** 엑셀 내보내기에 필요한 데이터 묶음(훅이 조회해 채운다). */
@@ -98,6 +102,7 @@ export function buildBookingSheet(
       { header: '기업(스타트업)', width: 28 },
       { header: '예약 경로', width: 12 },
       { header: '세션 상태', width: 12 },
+      { header: '상담 희망사항', width: 40 },
     ],
     rows: slots.map((s) => [
       safeDateTime(s.start_time, tz),
@@ -107,6 +112,7 @@ export function buildBookingSheet(
       s.startup_id ? nameOf(userById, s.startup_id) : '(미예약)',
       BOOKING_TYPE_LABELS[s.booking_type],
       SESSION_STATUS_LABELS[s.session_status],
+      s.counseling_request ?? '',
     ]),
   };
 }
@@ -226,6 +232,8 @@ export function buildParticipantSheet(roster: RosterUser[]): SheetSpec {
       { header: '담당자', width: 16 },
       { header: '이메일', width: 28 },
       { header: '연락처', width: 18 },
+      { header: '참고링크', width: 32 },
+      { header: '소개서 첨부', width: 12 },
     ],
     rows: roster.map((u) => [
       PARTICIPANT_ROLE_LABELS[u.role],
@@ -235,6 +243,9 @@ export function buildParticipantSheet(roster: RosterUser[]): SheetSpec {
       u.contact_name ?? '',
       u.email,
       u.phone_number ?? '',
+      // 참고링크·소개서 첨부는 스타트업 프로필 컬럼(전문가는 빈칸).
+      u.role === 'STARTUP' ? u.company_homepage ?? '' : '',
+      u.role === 'STARTUP' ? (u.proposal_file_url ? 'O' : 'X') : '',
     ]),
   };
 }

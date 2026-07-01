@@ -1,7 +1,8 @@
 import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
+import { Badge } from '@/components/common/Badge';
 import { FileCell } from '@/components/admin/participantCells';
-import { ProposalHistoryTimeline } from '@/components/admin/ProposalHistoryTimeline';
+import { ExpertAvatarView } from '@/components/admin/ExpertAvatarField';
 import { participantLabel, PARTICIPANT_ROLE_LABELS } from '@/lib/labels';
 import type { AssignableUser } from '@/types/eventDetail';
 
@@ -43,7 +44,19 @@ export function ParticipantDetailModal({
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-[5rem_1fr] gap-x-3 gap-y-2 text-sm">
+        {/* 전문가는 사진(좌) + 정보(우) 가로 배치, 좁은 화면에서는 세로로 쌓는다. */}
+        <div className={isExpert ? 'flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5' : ''}>
+          {isExpert && (
+            <div className="flex shrink-0 justify-center sm:justify-start">
+              <ExpertAvatarView path={user.profile_image_url} />
+            </div>
+          )}
+
+          <div
+            className={`grid grid-cols-[5rem_1fr] gap-x-3 gap-y-2 text-sm${
+              isExpert ? ' min-w-0 flex-1' : ''
+            }`}
+          >
           <Field label="구분" value={PARTICIPANT_ROLE_LABELS[user.role]} />
           {isExpert ? (
             <>
@@ -64,14 +77,11 @@ export function ParticipantDetailModal({
           <div className="text-neutral-base/60">분야</div>
           <div>
             {fieldNames.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5">
                 {fieldNames.map((n) => (
-                  <span
-                    key={n}
-                    className="rounded-md border border-border bg-surface px-2 py-0.5 text-xs font-medium text-neutral-base/80"
-                  >
+                  <Badge key={n} tone="brand">
                     {n}
-                  </span>
+                  </Badge>
                 ))}
               </div>
             ) : (
@@ -82,6 +92,7 @@ export function ParticipantDetailModal({
           <p className="whitespace-pre-wrap break-words text-neutral-base/90">
             {description || <span className="text-neutral-base/40">-</span>}
           </p>
+          </div>
         </div>
 
         {/* 스타트업 IR/소개서: 읽기 전용으로 다운로드/조회만 허용 */}
@@ -97,9 +108,6 @@ export function ParticipantDetailModal({
             </div>
           </div>
         )}
-
-        {/* 스타트업 소개서 변경 이력(DB 상세 모달과 동일) — 언제·누가·어떤 파일을 올렸는지 종합. */}
-        {!isExpert && <ProposalHistoryTimeline userId={user.id} />}
       </div>
     </Modal>
   );

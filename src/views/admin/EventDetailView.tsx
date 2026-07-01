@@ -13,9 +13,8 @@ import { EventTablesPanel } from '@/components/admin/EventTablesPanel';
 import { SlotGenerationPanel } from '@/components/admin/SlotGenerationPanel';
 import { BookingStatsPanel } from '@/components/admin/BookingStatsPanel';
 import { ProgressDashboardPanel } from '@/components/admin/ProgressDashboardPanel';
+import { SatisfactionSurveyPanel } from '@/components/admin/SatisfactionSurveyPanel';
 import { SurveyBuilderPanel } from '@/components/admin/SurveyBuilderPanel';
-import { SurveyReportPanel } from '@/components/admin/SurveyReportPanel';
-import { ExpertSurveyReportPanel } from '@/components/admin/ExpertSurveyReportPanel';
 import { CounselingBuilderPanel } from '@/components/admin/CounselingBuilderPanel';
 import { CounselingReportPanel } from '@/components/admin/CounselingReportPanel';
 import { NotificationLogPanel } from '@/components/admin/NotificationLogPanel';
@@ -31,7 +30,6 @@ import {
   useEventSlots,
   useEventTables,
 } from '@/hooks/useEventDetail';
-import { useEventExport } from '@/hooks/useEventExport';
 import { useClearEventStatusOverride } from '@/hooks/useEventMutations';
 import { useMyEventRoles } from '@/hooks/useMyEventRoles';
 import { useEventOperators } from '@/hooks/useOperators';
@@ -68,8 +66,7 @@ const TABS: { value: DetailTab; label: string }[] = [
   { value: 'booking', label: '예약관리' },
   { value: 'progress', label: '진행관리' },
   { value: 'counseling', label: '상담일지' },
-  { value: 'survey', label: '행사 만족도' },
-  { value: 'expert-survey', label: '전문가 만족도' },
+  { value: 'survey', label: '만족도 조사' },
   { value: 'operations', label: '운영관리' },
   { value: 'notifications', label: '행사알림' },
 ];
@@ -114,7 +111,6 @@ export function EventDetailView() {
   const tablesQ = useEventTables(eventId);
   const slotsQ = useEventSlots(eventId);
   const usersQ = useAssignableUsers();
-  const exporter = useEventExport(eventId, eventQ.data?.timezone ?? 'Asia/Seoul');
   const myRoles = useMyEventRoles();
   const myPermission = myRoles.permissionFor(eventId);
   // 이 행사에 권한을 받은 운영자 목록(전체 조회는 최고관리자 RLS 한정).
@@ -232,15 +228,6 @@ export function EventDetailView() {
                     행사 정보 수정
                   </SectionActionButton>
                 )}
-                {/* 다운로드는 정책상 MANAGER 이상(§3.3). */}
-                {canManage && (
-                  <SectionActionButton
-                    onClick={() => exporter.mutate({ title: event.title })}
-                    disabled={exporter.isPending}
-                  >
-                    {exporter.isPending ? '엑셀 생성 중…' : '엑셀 내보내기'}
-                  </SectionActionButton>
-                )}
               </div>
             </div>
           )
@@ -259,12 +246,6 @@ export function EventDetailView() {
         onChange={setTab}
         ariaLabel="행사 상세 탭"
       />
-
-      {exporter.isError && (
-        <Alert tone="error">
-          엑셀 내보내기에 실패했습니다. {(exporter.error as Error)?.message ?? ''}
-        </Alert>
-      )}
 
       {(participantsQ.isError || tablesQ.isError || slotsQ.isError || usersQ.isError) && (
         <Alert tone="error">
@@ -325,6 +306,8 @@ export function EventDetailView() {
             maxSessions={event.max_sessions_per_startup}
             eventId={eventId}
             forceAssignEnabled={canManage && !locked}
+            onRefresh={() => slotsQ.refetch()}
+            refreshing={slotsQ.isFetching}
           />
         </div>
       )}
@@ -352,24 +335,16 @@ export function EventDetailView() {
       )}
 
       {activeTab === 'survey' && (
-        <SurveyReportPanel
-          eventId={eventId}
-          participants={participants}
-          userById={userById}
-          timezone={event.timezone}
-          onOpenSettings={canManage ? () => setSettingsTab('survey') : undefined}
-        />
-      )}
-
-      {activeTab === 'expert-survey' && (
-        <ExpertSurveyReportPanel
+        <SatisfactionSurveyPanel
           eventId={eventId}
           participants={participants}
           userById={userById}
           timezone={event.timezone}
           satisfactionPolicy={event.satisfaction_policy}
           totalSessions={computeProgressStats(slots).total}
-          onOpenSettings={canManage ? () => setSettingsTab('expert-survey') : undefined}
+          onOpenSettings={canManage ? () => setSettingsTab('survey') : undefined}
+          onOpenExpertSettings={canManage ? () => setSettingsTab('expert-survey') : undefined}
+          slots={slots}
         />
       )}
 

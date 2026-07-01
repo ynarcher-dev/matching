@@ -24,6 +24,7 @@ import {
   RowAction,
 } from '@/components/admin/participantCells';
 import { formatDateTime } from '@/lib/datetime';
+import { toCsv } from '@/lib/surveyReport';
 import { useDataTable } from '@/hooks/useDataTable';
 import { useFields } from '@/hooks/useFields';
 import { useEventSlots } from '@/hooks/useEventDetail';
@@ -79,7 +80,7 @@ function toEditableParticipant(u: AssignableUser): EditableParticipant {
     expert_position: u.expert_position,
     expert_description: u.expert_description,
     proposal_file_url: u.proposal_file_url,
-    profile_image_url: null,
+    profile_image_url: u.profile_image_url,
     field_ids: u.field_ids,
   };
 }
@@ -653,6 +654,71 @@ function CurrentList({
   const getRowNumber = (indexOnPage: number) =>
     table.totalFiltered - ((table.page - 1) * table.pageSize + indexOnPage);
 
+  // 전체 명단 CSV 내보내기 — 검색·필터·페이지와 무관하게 이 역할의 전 참가자를 이름순으로.
+  const handleExportCsv = () => {
+    const headers = isExpert
+      ? ['이름', '소속', '직책', '이메일', '연락처', '분야', '배정 테이블', '최근 로그인', '등록일']
+      : [
+          '이름',
+          '기업명',
+          '대표자명',
+          '이메일',
+          '연락처',
+          '분야',
+          'IR/소개서',
+          '최근 로그인',
+          '등록일',
+        ];
+    const fieldsOf = (u: AssignableUser | null) =>
+      (u?.field_ids ?? [])
+        .map((id) => fieldNameById.get(id))
+        .filter(Boolean)
+        .join(', ');
+    const loginOf = (u: AssignableUser | null) =>
+      u?.last_login_at ? formatDateTime(u.last_login_at, DISPLAY_TZ) : '미로그인';
+    const createdOf = (u: AssignableUser | null) =>
+      u?.created_at ? formatDateTime(u.created_at, DISPLAY_TZ) : '';
+    const rows = [...participants]
+      .sort((a, b) => (userOf(a)?.name ?? '').localeCompare(userOf(b)?.name ?? '', 'ko'))
+      .map((p) => {
+        const u = userOf(p);
+        if (isExpert) {
+          const code = p.default_table_id ? (tableCodeById.get(p.default_table_id) ?? '') : '';
+          return [
+            u?.name ?? '',
+            u?.expert_organization ?? '',
+            u?.expert_position ?? '',
+            u?.email ?? '',
+            u?.phone_number ?? '',
+            fieldsOf(u),
+            code,
+            loginOf(u),
+            createdOf(u),
+          ];
+        }
+        return [
+          u?.name ?? '',
+          u?.company_name ?? '',
+          u?.representative_name ?? '',
+          u?.email ?? '',
+          u?.phone_number ?? '',
+          fieldsOf(u),
+          u?.proposal_file_url ? '제출' : '미제출',
+          loginOf(u),
+          createdOf(u),
+        ];
+      });
+    const csv = toCsv(headers, rows);
+    // 엑셀 한글 깨짐 방지를 위해 UTF-8 BOM 부착.
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `참가${PARTICIPANT_ROLE_LABELS[role]}명단.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const columns = useMemo<DataTableColumn<EventParticipantRow>[]>(() => {
     // 기본정보 컬럼 — 스타트업 DB / 전문가 DB 와 동일한 구성(#·이름·기업명/소속·대표자명/직책·이메일·연락처·분야).
     const cols: DataTableColumn<EventParticipantRow>[] = [
@@ -920,7 +986,12 @@ function CurrentList({
             { value: 'NONE', label: '미로그인' },
           ]}
         />
-        {addSlot && <div className="ml-auto">{addSlot}</div>}
+        <div className="ml-auto flex items-center gap-2">
+          <SectionActionButton onClick={handleExportCsv} disabled={participants.length === 0}>
+            CSV 내보내기
+          </SectionActionButton>
+          {addSlot}
+        </div>
       </FilterBar>
       {!locked && selectedIds.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted px-3 py-2">

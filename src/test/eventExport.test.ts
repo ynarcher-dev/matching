@@ -35,6 +35,7 @@ const expertUser: AssignableUser = {
   expert_description: null,
   field_ids: [],
   proposal_file_url: null,
+  profile_image_url: null,
   last_login_at: null,
   created_at: '',
 };
@@ -54,6 +55,7 @@ const startupUser: AssignableUser = {
   expert_description: null,
   field_ids: [],
   proposal_file_url: null,
+  profile_image_url: null,
   last_login_at: null,
   created_at: '',
 };
@@ -82,17 +84,28 @@ function slot(p: Partial<MatchingSlotRow> & Pick<MatchingSlotRow, 'id'>): Matchi
 
 describe('buildBookingSheet', () => {
   it('슬롯마다 한 행을 만들고 라벨·이름을 해석한다', () => {
-    const sheet = buildBookingSheet([slot({ id: 's1' })], userById, tables, TZ);
+    const sheet = buildBookingSheet(
+      [slot({ id: 's1', counseling_request: '투자 유치 전략 상담' })],
+      userById,
+      tables,
+      TZ,
+    );
     expect(sheet.name).toBe('예약 현황');
-    expect(sheet.columns).toHaveLength(7);
+    expect(sheet.columns).toHaveLength(8);
     expect(sheet.rows).toHaveLength(1);
-    const [start, , table, expert, company, route, status] = sheet.rows[0];
+    const [start, , table, expert, company, route, status, request] = sheet.rows[0];
     expect(start).toBe('2026.07.10 10:00');
     expect(table).toBe('A-01');
     expect(expert).toBe('김전문 · 벤처대학');
     expect(company).toBe('에이콘 · 홍길동');
     expect(route).toBe('수동');
     expect(status).toBe('완료');
+    expect(request).toBe('투자 유치 전략 상담');
+  });
+
+  it('희망사항이 없으면 빈 칸으로 둔다', () => {
+    const sheet = buildBookingSheet([slot({ id: 's1', counseling_request: null })], userById, tables, TZ);
+    expect(sheet.rows[0][7]).toBe('');
   });
 
   it('미예약 슬롯은 기업 칸에 (미예약) 표기', () => {
@@ -241,6 +254,8 @@ describe('buildParticipantSheet', () => {
       contact_name: '김담당',
       expert_organization: null,
       expert_position: null,
+      company_homepage: 'acme.com',
+      proposal_file_url: 'proposals/s1.pdf',
     },
     {
       id: 'X1',
@@ -253,13 +268,25 @@ describe('buildParticipantSheet', () => {
       contact_name: null,
       expert_organization: '벤처대학',
       expert_position: '교수',
+      company_homepage: null,
+      proposal_file_url: null,
     },
   ];
 
-  it('역할에 따라 기업/소속·대표/직책을 채운다', () => {
+  it('역할에 따라 기업/소속·대표/직책을 채우고 스타트업만 참고링크·소개서 첨부를 표기한다', () => {
     const sheet = buildParticipantSheet(roster);
-    expect(sheet.rows[0]).toEqual(['스타트업', '대표님', '에이콘', '홍길동', '김담당', 's1@acme.com', '01011112222']);
-    expect(sheet.rows[1]).toEqual(['전문가', '김전문', '벤처대학', '교수', '', 'x1@univ.ac.kr', '']);
+    expect(sheet.rows[0]).toEqual([
+      '스타트업', '대표님', '에이콘', '홍길동', '김담당', 's1@acme.com', '01011112222', 'acme.com', 'O',
+    ]);
+    // 전문가는 참고링크·소개서 첨부 칸이 빈칸.
+    expect(sheet.rows[1]).toEqual([
+      '전문가', '김전문', '벤처대학', '교수', '', 'x1@univ.ac.kr', '', '', '',
+    ]);
+  });
+
+  it('소개서 미첨부 스타트업은 X 로 표기', () => {
+    const sheet = buildParticipantSheet([{ ...roster[0], proposal_file_url: null }]);
+    expect(sheet.rows[0][8]).toBe('X');
   });
 });
 

@@ -25,7 +25,9 @@ interface BucketSpec {
 }
 
 const PROPOSAL_MAX = 10 * 1024 * 1024; // 10MB
-const AVATAR_MAX = 5 * 1024 * 1024; // 5MB
+// 전문가 프로필 사진은 리사이즈/압축 없이 원본 고화질 그대로 저장한다.
+// 고해상도 원본(DSLR·휴대폰)이 막히지 않도록 여유 있게(Supabase 전역 기본 50MB 한도 내).
+const AVATAR_MAX = 50 * 1024 * 1024; // 50MB
 
 export const BUCKET_SPEC: Record<ParticipantRole, BucketSpec> = {
   STARTUP: {
@@ -40,7 +42,7 @@ export const BUCKET_SPEC: Record<ParticipantRole, BucketSpec> = {
     accept: ['image/jpeg', 'image/png', 'image/webp'],
     acceptAttr: 'image/jpeg,image/png,image/webp',
     maxBytes: AVATAR_MAX,
-    hint: 'JPG·PNG·WEBP · 최대 5MB',
+    hint: 'JPG·PNG·WEBP · 원본 고화질 · 최대 50MB',
   },
 };
 

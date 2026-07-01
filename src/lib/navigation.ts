@@ -33,10 +33,11 @@ export const ROLE_NAV: Record<AppRole, NavItem[]> = {
   ],
   EXPERT: [
     { label: '오늘의 스케줄', path: '/expert/dashboard', icon: '🗓' },
-    { label: '이전 상담 이력', path: '/expert/history', icon: '📋' },
+    { label: '안내 사항', path: '/expert/notices', icon: '📢' },
   ],
   STARTUP: [
-    { label: '내 예약 관리', path: '/startup/booking', icon: '🗓' },
+    { label: '예약 및 조회', path: '/startup/booking', icon: '🗓' },
+    { label: '자료 첨부', path: '/startup/proposals', icon: '📎' },
     { label: '안내 사항', path: '/startup/notices', icon: '📢' },
   ],
 };

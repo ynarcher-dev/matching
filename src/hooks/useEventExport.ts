@@ -28,7 +28,7 @@ import type { ReportResponse } from '@/hooks/useSurveyReport';
 
 const USER_COLUMNS =
   'id,role,name,email,phone_number,company_name,representative_name,contact_name,' +
-  'expert_organization,expert_position';
+  'expert_organization,expert_position,company_homepage,proposal_file_url';
 
 interface RawCounselingSlot {
   id: string;
@@ -62,7 +62,7 @@ async function fetchBundle(eventId: string, timezone: string): Promise<EventExpo
   const [slotsR, tablesR, participantsR, surveyQR, counselingQR] = await Promise.all([
     supabase
       .from('matching_slots')
-      .select('id,event_id,expert_id,startup_id,start_time,end_time,table_id,booking_type,session_status')
+      .select('id,event_id,expert_id,startup_id,start_time,end_time,table_id,booking_type,session_status,counseling_request')
       .eq('event_id', eventId)
       .order('start_time', { ascending: true })
       .returns<MatchingSlotRow[]>(),
@@ -148,6 +148,7 @@ async function fetchBundle(eventId: string, timezone: string): Promise<EventExpo
         expert_description: null,
         field_ids: [],
         proposal_file_url: null, // 내보내기 이름 해석용 — IR 경로·연락처·분야 불필요
+        profile_image_url: null,
         last_login_at: null,
         created_at: '',
       },

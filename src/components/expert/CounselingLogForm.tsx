@@ -14,6 +14,7 @@ import {
 import {
   useCounselingLog,
   useCounselingLogQuestions,
+  useReopenCounselingLog,
   useSaveCounselingDraft,
   useSubmitCounselingLog,
 } from '@/hooks/useExpertPortal';
@@ -24,7 +25,7 @@ import type { MatchingSlotRow } from '@/types/eventDetail';
 /** 입력을 멈춘 뒤 자동 임시저장까지의 대기(ms). */
 const AUTOSAVE_DEBOUNCE_MS = 5000;
 
-/** 1~5 평점 선택(큰 터치 영역, 라디오 그룹). */
+/** 1~5 평점 선택(컴팩트 버튼, 라디오 그룹). */
 function RatingField({
   label,
   value,
@@ -45,7 +46,7 @@ function RatingField({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(n)}
-            className={`flex h-11 flex-1 items-center justify-center rounded-lg border text-base font-bold transition-colors ${
+            className={`flex h-9 w-11 shrink-0 items-center justify-center rounded-lg border text-sm font-bold transition-colors ${
               active
                 ? 'border-brand bg-brand text-white'
                 : 'border-border bg-white text-neutral-base hover:border-brand'
@@ -208,6 +209,7 @@ export function CounselingLogForm({
   const logQ = useCounselingLog(slotId, true);
   const saveM = useSaveCounselingDraft(eventId);
   const submitM = useSubmitCounselingLog(eventId);
+  const reopenM = useReopenCounselingLog(eventId);
 
   const [draft, setDraft] = useState<CounselingDraft>(emptyDraft);
   const [seeded, setSeeded] = useState(false);
@@ -277,7 +279,10 @@ export function CounselingLogForm({
     setDraft((d) => ({ ...d, answers: { ...d.answers, [qid]: next } }));
   };
 
-  const mutationError = (submitM.isError && (submitM.error as Error).message) || null;
+  const mutationError =
+    (submitM.isError && (submitM.error as Error).message) ||
+    (reopenM.isError && (reopenM.error as Error).message) ||
+    null;
 
   const handleManualSave = () => {
     setFormError(null);
@@ -302,6 +307,11 @@ export function CounselingLogForm({
     submitM.mutate({ slotId, questions, draft }, { onSuccess: () => onSubmitted?.() });
   };
 
+  const handleReopen = () => {
+    setFormError(null);
+    reopenM.mutate(slotId);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-10">
@@ -317,8 +327,8 @@ export function CounselingLogForm({
         <div className="flex flex-col gap-5">
           {alreadySubmitted && (
             <Alert tone="info">
-              이미 제출된 상담일지입니다. 수정 후 다시 제출하면 변경 이력이 감사 로그에 기록됩니다.
-              (행사 종료 전까지 수정 가능)
+              제출 완료된 상담일지입니다. 내용을 수정하려면 아래 "제출 취소"로 다시 진행 중 상태로
+              되돌린 뒤 편집해 주세요. (행사 종료 전까지 가능)
             </Alert>
           )}
 
@@ -377,27 +387,6 @@ export function CounselingLogForm({
             )}
           </section>
 
-          {/* 공개 여부 (메타 필드) */}
-          <section className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5">
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold text-neutral-base">
-                상담 의견 스타트업 공개
-              </span>
-              <span className="text-xs text-neutral-base/60">
-                점수·구조화 답변은 항상 비공개입니다. 공개 허용 시 텍스트 상담 의견만 스타트업에
-                노출됩니다.
-              </span>
-            </div>
-            <Toggle
-              label="상담 의견 스타트업 공개"
-              checked={draft.isPublic}
-              onChange={(next) => {
-                markDirty();
-                setDraft((d) => ({ ...d, isPublic: next }));
-              }}
-            />
-          </section>
-
           {(formError || mutationError) && <Alert tone="error">{formError ?? mutationError}</Alert>}
         </div>
       </div>
@@ -406,18 +395,32 @@ export function CounselingLogForm({
       <div className="flex items-center justify-between gap-2 border-t border-border bg-surface px-4 py-3">
         <AutosaveIndicator state={saveState} enabled={autosaveEnabled} />
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="md"
-            onClick={handleManualSave}
-            loading={saveM.isPending}
-            disabled={!autosaveEnabled}
-          >
-            임시저장
-          </Button>
-          <Button size="md" onClick={handleSubmit} loading={submitM.isPending}>
-            상담 완료 및 제출
-          </Button>
+          {alreadySubmitted ? (
+            // 제출 완료(COMPLETED) 상태: 제출 취소로 다시 진행 중(IN_PROGRESS)으로 되돌린다.
+            <Button
+              variant="outline"
+              size="md"
+              onClick={handleReopen}
+              loading={reopenM.isPending}
+            >
+              제출 취소
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="md"
+                onClick={handleManualSave}
+                loading={saveM.isPending}
+                disabled={!autosaveEnabled}
+              >
+                임시저장
+              </Button>
+              <Button size="md" onClick={handleSubmit} loading={submitM.isPending}>
+                상담 완료 및 제출
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -152,9 +152,19 @@ export function OperationsPanel({
     [rows, selected],
   );
 
-  const handleDownload = () => {
-    if (selectedCompanies.length === 0) return;
-    bundle.mutate({ companies: selectedCompanies, userById });
+  // 전체(일괄) 다운로드 대상 = 현재 필터/검색과 무관한 참가 기업 전체.
+  const allCompanies = useMemo<BundleCompany[]>(
+    () =>
+      rows.map((r) => ({ userId: r.userId, companyName: r.companyName, contactName: r.contactName })),
+    [rows],
+  );
+
+  // 진행 중인 다운로드 종류(선택/전체) — 해당 버튼에만 스피너를 띄운다.
+  const [pendingKind, setPendingKind] = useState<'selected' | 'all' | null>(null);
+  const runDownload = (targets: BundleCompany[], kind: 'selected' | 'all') => {
+    if (targets.length === 0 || bundle.isPending) return;
+    setPendingKind(kind);
+    bundle.mutate({ companies: targets, userById }, { onSettled: () => setPendingKind(null) });
   };
 
   const sortValues = useMemo<Record<string, (r: DeliverableRow) => SortValue>>(
@@ -335,20 +345,34 @@ export function OperationsPanel({
           </div>
         }
         actions={
-          <Button onClick={handleDownload} disabled={selected.size === 0 || bundle.isPending}>
-            {bundle.isPending ? 'ZIP 생성 중…' : `산출물 일괄 다운로드 (${selected.size})`}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => runDownload(selectedCompanies, 'selected')}
+              loading={pendingKind === 'selected'}
+              disabled={selected.size === 0 || bundle.isPending}
+            >
+              선택 다운로드 ({selected.size})
+            </Button>
+            <Button
+              onClick={() => runDownload(allCompanies, 'all')}
+              loading={pendingKind === 'all'}
+              disabled={allCompanies.length === 0 || bundle.isPending}
+            >
+              일괄 다운로드 ({allCompanies.length})
+            </Button>
+          </div>
         }
       />
 
       {/* 선택 태그 — 페이지와 무관하게 누적된 선택 기업. ✕ 또는 전체 해제로 취소. */}
       {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2.5">
-          <span className="text-xs font-semibold text-neutral-base/60">선택 {selected.size}개사</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5">
+          <span className="text-sm font-semibold text-neutral-base/60">선택 {selected.size}개사</span>
           {selectedCompanies.map((c) => (
             <span
               key={c.userId}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2 py-0.5 text-xs text-neutral-base"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-white px-2.5 py-1 text-sm text-neutral-base"
             >
               {c.companyName}
               <button
@@ -364,7 +388,7 @@ export function OperationsPanel({
           <button
             type="button"
             onClick={() => setSelected(new Set())}
-            className="ml-1 text-xs font-medium text-neutral-base/60 hover:text-brand"
+            className="ml-1 text-sm font-medium text-neutral-base/60 hover:text-brand"
           >
             전체 해제
           </button>
@@ -398,7 +422,9 @@ function MetricCell({ metric }: { metric: DeliverableMetric | null }) {
   if (metric === null) {
     return <span className="text-neutral-base/30">–</span>;
   }
-  const met = isMetricMet(metric);
+  // 기대치가 0(0/0)이면 달성한 산출물이 없는 '데이터 없음' 상태이므로 초록(달성) 대신 중립색으로 둔다.
+  // (isMetricMet 은 완료 여부 판정용으로 0/0 을 통과시키지만, 여기서는 색상만 별도로 판단한다.)
+  const met = metric.total > 0 && isMetricMet(metric);
   return (
     <span className={`tabular-nums font-semibold ${met ? 'text-success' : 'text-neutral-base/70'}`}>
       {metric.done} / {metric.total}

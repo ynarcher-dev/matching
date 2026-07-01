@@ -53,6 +53,8 @@ export interface AssignableUser {
   field_ids: string[];
   /** 스타트업 IR/소개서 업로드 여부 확인용 객체 경로(8-H). 미업로드면 null. */
   proposal_file_url: string | null;
+  /** 전문가 프로필 사진 객체 경로(avatars 버킷). 미업로드면 null(기본 아이콘 표시). */
+  profile_image_url: string | null;
   /** 최근 로그인 시각(지정 표 운영 컬럼 — 스타트업 DB 와 동일). 미로그인이면 null. */
   last_login_at: string | null;
   /** 등록일(지정 표 운영 컬럼 — 스타트업 DB 와 동일). */

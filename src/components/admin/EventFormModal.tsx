@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
@@ -114,6 +114,10 @@ export function EventFormModal({ open, onClose, event }: EventFormModalProps) {
 
   const [admins, setAdmins] = useState<PendingAdmin[]>([]);
   const [adminError, setAdminError] = useState<string | null>(null);
+  // 편집 모드에서 배정 목록으로 admins 를 시드하는 것은 모달 오픈 사이클당 1회만 한다.
+  // 이 가드가 없으면 assignmentsQ 가 (staleTime 만료·백그라운드 refetch 등으로) 재조회될 때마다
+  // effect 가 setAdmins 로 로컬 상태를 덮어써, 사용자가 방금 추가/변경한 관리자가 사라진다.
+  const seededRef = useRef(false);
 
   const {
     register,
@@ -127,7 +131,11 @@ export function EventFormModal({ open, onClose, event }: EventFormModalProps) {
 
   // 모달이 열릴 때마다 대상 행사에 맞춰 폼을 초기화한다.
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      // 닫힐 때 시드 가드를 초기화해 다음 오픈에서 다시 1회 시드되게 한다.
+      seededRef.current = false;
+      return;
+    }
     reset(buildDefaults(event));
     setAdminError(null);
     if (!isSuper) {
@@ -139,14 +147,17 @@ export function EventFormModal({ open, onClose, event }: EventFormModalProps) {
       setAdmins([
         { user_id: me.id, name: me.name, email: me.email, permission: 'OWNER', locked: true, lockedLabel: '작성자' },
       ]);
+      seededRef.current = true; // 개설 모드는 여기서 시드 완료.
     } else {
       setAdmins([]);
     }
   }, [open, event, isSuper, me, reset]);
 
-  // 편집: 현재 활성 운영자 로드 시 폼 목록을 시드한다(OWNER 만 잠금, 나머지 등급은 편집 가능).
+  // 편집: 현재 활성 운영자 로드 시 폼 목록을 오픈 사이클당 1회만 시드한다
+  // (OWNER 만 잠금, 나머지 등급은 편집 가능). 이후 사용자가 추가/변경한 로컬 상태는
+  // assignmentsQ 재조회가 있어도 덮어쓰지 않는다.
   useEffect(() => {
-    if (!open || !isSuper || !event) return;
+    if (!open || !isSuper || !event || seededRef.current) return;
     const rows = assignmentsQ.data;
     if (!rows) return;
     setAdmins(
@@ -159,6 +170,7 @@ export function EventFormModal({ open, onClose, event }: EventFormModalProps) {
         lockedLabel: r.permission === 'OWNER' ? '작성자' : undefined,
       })),
     );
+    seededRef.current = true;
   }, [open, isSuper, event, assignmentsQ.data]);
 
   // 후보: 활성·비최고관리자 운영자 중 이미 목록에 있는 사용자 제외.

@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/common/Badge';
+import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
+import { FieldTags } from '@/components/common/FieldTags';
+import { TableTag } from '@/components/common/TableTag';
 import { buildBookingSchedule } from '@/lib/booking';
 import { formatDateTime } from '@/lib/datetime';
 import { companyName, BOOKING_TYPE_LABELS } from '@/lib/labels';
@@ -19,11 +22,19 @@ interface BookingScheduleTableProps {
   participants: EventParticipantRow[];
   tables: EventTable[];
   userById: Map<string, AssignableUser>;
+  /** field_id → 분야명. 전문가 행 소속 아래 분야 태그 표시용. */
+  fieldNameById: Map<string, string>;
   timezone: string;
   /** 빈 슬롯 클릭 시 호출(강제 배정 모달 열기). 없으면 빈 슬롯은 비활성 표시. */
   onSelectEmptySlot?: (slot: MatchingSlotRow) => void;
+  /** 예약된 셀 클릭 시 호출(상담 신청 상세 모달 열기). */
+  onOpenDetail?: (slot: MatchingSlotRow) => void;
   /** 제목 우측 액션 버튼(강제 배치 · AI배치 등). */
   headerActions?: ReactNode;
+  /** "새로고침" 버튼 클릭 시 데이터만 다시 로드. 없으면 새로고침 버튼 숨김. */
+  onRefresh?: () => void;
+  /** 새로고침 진행 중 표시(스피너). */
+  refreshing?: boolean;
 }
 
 /** 예약 경로별 태그 tone(page_admin_event_detail.md §3.1 — 수동=success·AI=ai·강제=warning, 9-A tone). */
@@ -39,6 +50,7 @@ interface ExpertRow {
   expertId: string;
   name: string;
   org: string | null;
+  fields: string[];
   tableCode: string;
 }
 
@@ -52,11 +64,26 @@ export function BookingScheduleTable({
   participants,
   tables,
   userById,
+  fieldNameById,
   timezone,
   onSelectEmptySlot,
+  onOpenDetail,
   headerActions,
+  onRefresh,
+  refreshing = false,
 }: BookingScheduleTableProps) {
   const { columns, byExpert } = useMemo(() => buildBookingSchedule(slots), [slots]);
+
+  // 크게보기: 이 카드만 화면 전체로 확대(풀스크린 오버레이). ESC 로 해제.
+  const [enlarged, setEnlarged] = useState(false);
+  useEffect(() => {
+    if (!enlarged) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEnlarged(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [enlarged]);
 
   // 열(시작시각)별 종료시각 — 헤더에 "시작 ~ 종료" 표기용.
   const endByStart = useMemo(() => {
@@ -86,6 +113,9 @@ export function BookingScheduleTable({
         expertId,
         name: u?.name ?? '(알 수 없는 전문가)',
         org: u?.expert_organization ?? null,
+        fields: (u?.field_ids ?? [])
+          .map((id) => fieldNameById.get(id))
+          .filter((v): v is string => Boolean(v)),
         tableCode: tid ? (tableCodeById.get(tid) ?? '미지정') : '미지정',
       };
     });
@@ -93,13 +123,16 @@ export function BookingScheduleTable({
       (a, b) =>
         a.tableCode.localeCompare(b.tableCode, 'ko') || a.name.localeCompare(b.name, 'ko'),
     );
-  }, [byExpert, userById, defaultTableByExpert, tableCodeById]);
+  }, [byExpert, userById, fieldNameById, defaultTableByExpert, tableCodeById]);
 
   return (
-    <Card className="flex flex-col gap-3 p-5">
-      {/* 제목 좌측 · 경로 범례(+액션)는 우측 정렬 — 기업별 배치 현황과 동일한 헤더 레이아웃. */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-bold text-neutral-base">예약 배치 현황</h3>
+    <Card
+      className={`flex flex-col gap-3 p-5 ${
+        enlarged ? 'fixed inset-0 z-40 m-0 max-w-none rounded-none overflow-hidden' : ''
+      }`}
+    >
+      {/* 경로 범례는 좌측 정렬 · 액션(새로고침·크게보기)은 우측. */}
+      <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone="success" size="11">
             {BOOKING_TYPE_LABELS.MANUAL}
@@ -112,6 +145,25 @@ export function BookingScheduleTable({
           </Badge>
           {headerActions}
         </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          {onRefresh && (
+            <Button
+              variant="outline"
+              loading={refreshing}
+              leftIcon={<span aria-hidden>↻</span>}
+              onClick={onRefresh}
+            >
+              새로고침
+            </Button>
+          )}
+          <Button
+            variant={enlarged ? 'primary' : 'outline'}
+            leftIcon={<span aria-hidden>⤢</span>}
+            onClick={() => setEnlarged((v) => !v)}
+          >
+            {enlarged ? '크게보기 해제' : '크게보기'}
+          </Button>
+        </div>
       </div>
 
       {columns.length === 0 ? (
@@ -119,20 +171,28 @@ export function BookingScheduleTable({
           아직 생성된 슬롯이 없습니다. 배치 탭에서 시간표 슬롯을 생성하면 배치 현황이 표시됩니다.
         </p>
       ) : (
-        <div className="w-fit max-w-full overflow-x-auto rounded-xl border border-border">
-          <table className="border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b-2 border-border bg-surface text-neutral-base">
-                <th className="sticky left-0 z-10 w-44 whitespace-nowrap border-r border-border bg-surface px-3 py-2.5 font-bold">
-                  테이블 · 전문가
-                </th>
-                {columns.map((c) => {
-                  const end = endByStart.get(c);
-                  return (
-                    <th
-                      key={c}
-                      className="w-[96px] whitespace-nowrap border-r border-border px-1 py-2 text-center font-bold last:border-r-0"
-                    >
+        <div
+          className={`overflow-hidden rounded-xl border border-border ${
+            enlarged ? 'w-full flex-1 min-h-0' : 'w-full'
+          }`}
+        >
+          {/* 안쪽(overflow-auto): 실제 가로·세로 스크롤. 헤더는 sticky 고정, 남는 영역은 회색으로 채운다. */}
+          <div
+            className={`overflow-auto bg-surface ${enlarged ? 'h-full' : 'max-h-[calc(100vh-220px)]'}`}
+          >
+            <table className="border-collapse bg-surface-raised text-left text-sm">
+              <thead>
+                <tr className="sticky top-0 z-20 border-b-2 border-border bg-surface text-neutral-base">
+                  <th className="sticky left-0 z-30 w-56 min-w-56 whitespace-nowrap border-r border-border bg-surface px-3 py-2.5 font-bold">
+                    테이블 · 전문가
+                  </th>
+                  {columns.map((c) => {
+                    const end = endByStart.get(c);
+                    return (
+                      <th
+                        key={c}
+                        className="w-[96px] min-w-[96px] whitespace-nowrap border-r border-border bg-surface px-1 py-2 text-center font-bold last:border-r-0"
+                      >
                       <span className="block text-sm text-neutral-base">
                         {formatDateTime(c, timezone).slice(-5)}
                       </span>
@@ -151,18 +211,18 @@ export function BookingScheduleTable({
                 const cells = byExpert.get(row.expertId);
                 return (
                   <tr key={row.expertId} className="border-b border-border last:border-b-0">
-                    <th className="sticky left-0 z-10 w-44 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle">
-                      <span className="inline-block rounded bg-neutral-base px-2 py-0.5 text-xs font-bold text-white">
-                        {row.tableCode}
+                    <th className="sticky left-0 z-10 w-56 min-w-56 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle">
+                      <span className="flex items-center gap-1.5">
+                        <TableTag code={row.tableCode} />
+                        <span className="text-sm font-bold text-neutral-base">{row.name}</span>
                       </span>
-                      <span className="mt-1 block text-sm font-bold text-neutral-base">
-                        {row.name}
+                      {/* 소속·분야가 없어도 자리를 비워 행 높이를 일정하게 유지한다. */}
+                      <span className="mt-0.5 block h-4 text-xs font-medium text-neutral-base/70">
+                        {row.org ?? ''}
                       </span>
-                      {row.org && (
-                        <span className="block text-xs font-medium text-neutral-base/70">
-                          {row.org}
-                        </span>
-                      )}
+                      <div className="mt-1 h-[22px]">
+                        <FieldTags names={row.fields} />
+                      </div>
                     </th>
                     {columns.map((c) => {
                       const slot = cells?.get(c);
@@ -170,9 +230,14 @@ export function BookingScheduleTable({
                       return (
                         <td
                           key={c}
-                          className="w-[96px] border-r border-border p-1 align-middle last:border-r-0"
+                          className="w-[96px] min-w-[96px] border-r border-border p-1 align-middle last:border-r-0"
                         >
-                          <Cell slot={slot} startup={su} onSelectEmptySlot={onSelectEmptySlot} />
+                          <Cell
+                            slot={slot}
+                            startup={su}
+                            onSelectEmptySlot={onSelectEmptySlot}
+                            onOpenDetail={onOpenDetail}
+                          />
                         </td>
                       );
                     })}
@@ -180,7 +245,8 @@ export function BookingScheduleTable({
                 );
               })}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       )}
     </Card>
@@ -192,10 +258,12 @@ function Cell({
   slot,
   startup,
   onSelectEmptySlot,
+  onOpenDetail,
 }: {
   slot: MatchingSlotRow | undefined;
   startup: AssignableUser | undefined;
   onSelectEmptySlot?: (slot: MatchingSlotRow) => void;
+  onOpenDetail?: (slot: MatchingSlotRow) => void;
 }) {
   if (!slot) return <span className="block text-center text-neutral-base/15">·</span>;
   if (!slot.startup_id) {
@@ -214,8 +282,8 @@ function Cell({
     }
     return <span className="block py-1 text-center text-xs text-neutral-base/35">빈 슬롯</span>;
   }
-  return (
-    <div className="flex flex-col items-center gap-1.5 px-1 py-1.5 text-center">
+  const content = (
+    <>
       <Badge tone={TYPE_TONE[slot.booking_type]} size="11">
         {BOOKING_TYPE_LABELS[slot.booking_type]}
       </Badge>
@@ -227,6 +295,23 @@ function Cell({
           {startup.representative_name}
         </p>
       )}
-    </div>
+    </>
+  );
+
+  // 예약된 셀: 클릭하면 상담 신청 상세(희망사항·첨부·링크) 모달을 연다.
+  if (onOpenDetail) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenDetail(slot)}
+        title="상담 신청 상세 보기"
+        className="flex w-full flex-col items-center gap-1.5 rounded-md border border-transparent px-1 py-1.5 text-center outline-none transition-colors hover:border-brand hover:bg-danger-surface focus-visible:ring-2 focus-visible:ring-brand"
+      >
+        {content}
+      </button>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center gap-1.5 px-1 py-1.5 text-center">{content}</div>
   );
 }

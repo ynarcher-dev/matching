@@ -1,3 +1,4 @@
+import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { participantClient } from '@/lib/participantClient';
 import {
@@ -29,7 +30,7 @@ export const portalKeys = {
   tables: (eventId: string) => ['portal', 'tables', eventId] as const,
   slots: (eventId: string) => ['portal', 'slots', eventId] as const,
   proposal: (userId: string) => ['portal', 'proposal', userId] as const,
-  homepage: (userId: string) => ['portal', 'homepage', userId] as const,
+  links: (userId: string) => ['portal', 'links', userId] as const,
   avatars: (eventId: string, cacheKey: string) =>
     ['portal', 'avatars', eventId, cacheKey] as const,
 };
@@ -38,6 +39,8 @@ export const portalKeys = {
 export interface MyProposal {
   /** 저장된 Storage 객체 경로(`proposals/...`). 미업로드면 null. */
   filePath: string | null;
+  /** 업로드한 원본 파일명(users.proposal_file_name, 0068). 없으면 null. */
+  fileName: string | null;
   /** 마지막 업로드 시각(0046 트리거). 미업로드면 null. */
   uploadedAt: string | null;
 }
@@ -50,12 +53,17 @@ export function useMyProposal(userId: string) {
     queryFn: async () => {
       const { data, error } = await participantClient
         .from('users')
-        .select('proposal_file_url,proposal_uploaded_at')
+        .select('proposal_file_url,proposal_file_name,proposal_uploaded_at')
         .eq('id', userId)
-        .maybeSingle<{ proposal_file_url: string | null; proposal_uploaded_at: string | null }>();
+        .maybeSingle<{
+          proposal_file_url: string | null;
+          proposal_file_name: string | null;
+          proposal_uploaded_at: string | null;
+        }>();
       if (error) throw error;
       return {
         filePath: data?.proposal_file_url ?? null,
+        fileName: data?.proposal_file_name ?? null,
         uploadedAt: data?.proposal_uploaded_at ?? null,
       };
     },
@@ -115,6 +123,52 @@ export function useMyEvents() {
       return data ?? [];
     },
   });
+}
+
+/** 마지막 선택 행사 보존 키. 3개 스타트업 화면(예약·자료·안내)이 공유한다. */
+const SELECTED_EVENT_KEY = 'yna.startup.selectedEventId';
+
+function readStoredEventId(): string | null {
+  try {
+    return localStorage.getItem(SELECTED_EVENT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 스타트업 3개 화면 공통 행사 선택 상태.
+ * 선택한 행사 id 를 localStorage 에 보존해 새로고침·메뉴 이동 간에도 마지막 선택을 유지한다.
+ * 저장된 id 가 현재 참가 행사 목록에 없으면 첫 행사로 폴백한다.
+ */
+export function useSelectedStartupEvent() {
+  const eventsQ = useMyEvents();
+  const events = useMemo(() => eventsQ.data ?? [], [eventsQ.data]);
+  const [selectedId, setStored] = useState<string | null>(() => readStoredEventId());
+
+  const setSelectedId = useCallback((id: string | null) => {
+    setStored(id);
+    try {
+      if (id) localStorage.setItem(SELECTED_EVENT_KEY, id);
+      else localStorage.removeItem(SELECTED_EVENT_KEY);
+    } catch {
+      /* 저장 실패 시에도 세션 내 선택은 유지된다. */
+    }
+  }, []);
+
+  const event = useMemo(
+    () => events.find((e) => e.id === selectedId) ?? events[0],
+    [events, selectedId],
+  );
+
+  return {
+    eventsQ,
+    events,
+    event,
+    eventId: event?.id ?? '',
+    selectedId,
+    setSelectedId,
+  };
 }
 
 interface ExpertParticipantRow {
@@ -238,19 +292,28 @@ export function useExpertAvatars(eventId: string, experts: PortalExpert[]) {
   });
 }
 
-/** 행사장 테이블 코드 맵(슬롯 위치 표기용). id→table_code. */
+/** 행사장 테이블 정보(코드 + 상세 위치). */
+export interface EventTableInfo {
+  code: string;
+  /** 테이블 상세 위치/설명(event_tables.description). 없으면 null. */
+  description: string | null;
+}
+
+/** 행사장 테이블 맵(슬롯 위치 표기용). id→{code, description}. */
 export function useEventTableCodes(eventId: string) {
-  return useQuery<Map<string, string>>({
+  return useQuery<Map<string, EventTableInfo>>({
     queryKey: portalKeys.tables(eventId),
     enabled: Boolean(eventId),
     queryFn: async () => {
       const { data, error } = await participantClient
         .from('event_tables')
-        .select('id,table_code')
+        .select('id,table_code,description')
         .eq('event_id', eventId)
-        .returns<{ id: string; table_code: string }[]>();
+        .returns<{ id: string; table_code: string; description: string | null }[]>();
       if (error) throw error;
-      return new Map((data ?? []).map((t) => [t.id, t.table_code]));
+      return new Map(
+        (data ?? []).map((t) => [t.id, { code: t.table_code, description: t.description }]),
+      );
     },
   });
 }
@@ -338,33 +401,63 @@ export function useSetCounselingRequest(eventId: string) {
   });
 }
 
-/** 스타트업 본인 참고 URL(company_homepage, RLS users_select 허용). */
-export function useMyHomepage(userId: string) {
-  return useQuery<string | null>({
-    queryKey: portalKeys.homepage(userId),
+/** 스타트업 본인 참고 URL 링크 1건(company_links, 0073). */
+export interface CompanyLink {
+  id: string;
+  url: string;
+  /** 부연설명(선택). 없으면 null. */
+  label: string | null;
+  createdAt: string;
+}
+
+/** 스타트업 본인 참고 URL 목록(company_links, RLS 본인 SELECT). 등록순. */
+export function useMyCompanyLinks(userId: string) {
+  return useQuery<CompanyLink[]>({
+    queryKey: portalKeys.links(userId),
     enabled: Boolean(userId),
     queryFn: async () => {
       const { data, error } = await participantClient
-        .from('users')
-        .select('company_homepage')
-        .eq('id', userId)
-        .maybeSingle<{ company_homepage: string | null }>();
+        .from('company_links')
+        .select('id,url,label,created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .returns<{ id: string; url: string; label: string | null; created_at: string }[]>();
       if (error) throw error;
-      return data?.company_homepage ?? null;
+      return (data ?? []).map((r) => ({
+        id: r.id,
+        url: r.url,
+        label: r.label,
+        createdAt: r.created_at,
+      }));
     },
   });
 }
 
-/** 스타트업 본인 참고 URL 저장 — set_my_company_homepage RPC(0066). */
-export function useSetMyHomepage(userId: string) {
+/** 참고 URL 추가 — add_my_company_link RPC(0073). 대표 URL(company_homepage) 자동 동기화. */
+export function useAddCompanyLink(userId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (homepage: string) => {
-      const { error } = await participantClient.rpc('set_my_company_homepage', {
-        p_homepage: homepage,
+    mutationFn: async ({ url, label }: { url: string; label: string }) => {
+      const { error } = await participantClient.rpc('add_my_company_link', {
+        p_url: url,
+        p_label: label || null,
       });
       if (error) throw rpcError(error);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: portalKeys.homepage(userId) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: portalKeys.links(userId) }),
+  });
+}
+
+/** 참고 URL 삭제 — delete_my_company_link RPC(0073). */
+export function useDeleteCompanyLink(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await participantClient.rpc('delete_my_company_link', {
+        p_id: id,
+      });
+      if (error) throw rpcError(error);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: portalKeys.links(userId) }),
   });
 }

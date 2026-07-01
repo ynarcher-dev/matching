@@ -21,6 +21,8 @@
 @theme {
   --color-brand: #e22213;
   --color-brand-hover: #c41d10;
+  --color-brand-surface: #fef3f2;
+  --color-brand-border: #f6c9c4;
   --color-neutral-base: #515151;
   --color-surface: #f5f5f5;
   --color-surface-raised: #ffffff;

@@ -3,11 +3,12 @@ import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { Modal } from '@/components/common/Modal';
-import { Toggle } from '@/components/common/Toggle';
+import { Button } from '@/components/common/Button';
 import { StatBox } from '@/components/common/StatBox';
 import { StatCardSection } from '@/components/common/StatCardSection';
 import { TimeGridSheet } from '@/components/admin/TimeGridSheet';
 import { ReplaceNoShowModal } from '@/components/admin/ReplaceNoShowModal';
+import { SlotDetailModal } from '@/components/admin/SlotDetailModal';
 import { CompanyPhotoUploadPanel } from '@/components/staff/CompanyPhotoUploadPanel';
 import { useEventSlots } from '@/hooks/useEventDetail';
 import {
@@ -18,6 +19,7 @@ import {
 } from '@/hooks/useEventDashboard';
 import { useEventOperators } from '@/hooks/useOperators';
 import { useEventCompanyPhotos } from '@/hooks/useCompanyPhotos';
+import { useFields } from '@/hooks/useFields';
 import { computeProgressStats } from '@/lib/booking';
 import { participantLabel, SESSION_STATUS_TONE } from '@/lib/labels';
 import { Badge } from '@/components/common/Badge';
@@ -63,6 +65,9 @@ export function ProgressDashboardPanel({
 
   const replaceNoShow = useReplaceNoShow(eventId);
   const [replaceTarget, setReplaceTarget] = useState<MatchingSlotRow | null>(null);
+
+  // 셀 기업 정보 클릭 → 상담 신청 상세 모달.
+  const [detailSlot, setDetailSlot] = useState<MatchingSlotRow | null>(null);
 
   // 테이블 현장 담당자 — 진행 현황에서는 이름만 표시(배정은 테이블 설정). 이름 해석용 오퍼레이터.
   const operatorsQ = useEventOperators(eventId);
@@ -131,8 +136,34 @@ export function ProgressDashboardPanel({
     return m;
   }, [photosByStartup]);
 
+  // 분야 id → 이름(전문가 행 소속 아래 분야 태그 표시용).
+  const { data: fields } = useFields();
+  const fieldNameById = useMemo(
+    () => new Map((fields ?? []).map((f) => [f.id, f.name])),
+    [fields],
+  );
+
   const [photoFilter, setPhotoFilter] = useState(false);
+  // 크게보기: 이 그리드 카드만 화면 전체로 확대(풀스크린 오버레이).
+  const [enlarged, setEnlarged] = useState(false);
   const [photoTarget, setPhotoTarget] = useState<string | null>(null);
+
+  // 수동 새로고침: 데이터만 다시 불러오고(페이지 리로드 아님), 상단 자동갱신 타이머도 초기화.
+  const handleRefresh = () => {
+    slotsQ.refetch();
+    photosQ.refetch();
+    setTimeLeft(300);
+  };
+
+  // 크게보기 상태에서 ESC 로 해제.
+  useEffect(() => {
+    if (!enlarged) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEnlarged(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [enlarged]);
   const photoCompany = useMemo<PhotoCompany | null>(() => {
     if (!photoTarget) return null;
     const u = userById.get(photoTarget);
@@ -178,21 +209,39 @@ export function ProgressDashboardPanel({
         </div>
       </StatCardSection>
 
-      <Card className="flex flex-col gap-4 p-5">
+      <Card
+        className={`flex flex-col gap-4 p-5 ${
+          enlarged ? 'fixed inset-0 z-40 m-0 max-w-none rounded-none overflow-hidden' : ''
+        }`}
+      >
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
           <Legend tone={SESSION_STATUS_TONE.WAITING} label="대기중" />
           <Legend tone={SESSION_STATUS_TONE.IN_PROGRESS} label="진행중" />
           <Legend tone={SESSION_STATUS_TONE.COMPLETED} label="완료" />
           <Legend tone={SESSION_STATUS_TONE.NO_SHOW} label="노쇼" />
-          <span className="ml-1 text-neutral-base/50">
-            · 셀 색은 진행 상태입니다. 각 셀에서 대기중/진행중/완료를 직접 전환하면 출석이 자동
-            처리되고(진행·완료=출석, 노쇼=불참), 노쇼는 사유 버튼으로, 전문가 상담일지는 별도로
-            제출됩니다. 셀 하단 📷 버튼으로 증빙사진을 바로 등록·검수합니다.
-          </span>
-          <label className="ml-auto inline-flex items-center gap-2 text-neutral-base/70">
-            <Toggle checked={photoFilter} onChange={setPhotoFilter} label="사진 미등록 셀만 보기" />
-            <span className="font-semibold">📷 사진 미등록 셀만 보기</span>
-          </label>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              loading={slotsQ.isFetching}
+              leftIcon={<span aria-hidden>↻</span>}
+              onClick={handleRefresh}
+            >
+              새로고침
+            </Button>
+            <Button
+              variant={enlarged ? 'primary' : 'outline'}
+              leftIcon={<span aria-hidden>⤢</span>}
+              onClick={() => setEnlarged((v) => !v)}
+            >
+              {enlarged ? '크게보기 해제' : '크게보기'}
+            </Button>
+            <Button
+              variant={photoFilter ? 'primary' : 'outline'}
+              onClick={() => setPhotoFilter((v) => !v)}
+            >
+              📷 사진 미등록 셀만 보기
+            </Button>
+          </div>
         </div>
 
         {slotsQ.isError && (
@@ -201,6 +250,7 @@ export function ProgressDashboardPanel({
         {actionError && <Alert tone="error">{actionError}</Alert>}
 
         <TimeGridSheet
+          fieldNameById={fieldNameById}
           slots={slots}
           participants={participants}
           tables={tables}
@@ -216,8 +266,10 @@ export function ProgressDashboardPanel({
           }
           onReplaceNoShow={setReplaceTarget}
           onOpenPhotos={(slot) => slot.startup_id && setPhotoTarget(slot.startup_id)}
+          onOpenDetail={setDetailSlot}
           operators={managerOptions}
           managerByTable={managerByTable}
+          fillWidth={enlarged}
         />
       </Card>
 
@@ -282,6 +334,15 @@ export function ProgressDashboardPanel({
           />
         )}
       </Modal>
+
+      {/* 상담 신청 상세(희망사항·첨부·링크) 모달 — 셀 기업 정보 클릭 시 열림. */}
+      <SlotDetailModal
+        slot={detailSlot}
+        startup={detailSlot?.startup_id ? userById.get(detailSlot.startup_id) : undefined}
+        expert={detailSlot ? userById.get(detailSlot.expert_id) : undefined}
+        timezone={timezone}
+        onClose={() => setDetailSlot(null)}
+      />
     </div>
   );
 }

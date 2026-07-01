@@ -6,6 +6,9 @@ import { StatCardSection } from '@/components/common/StatCardSection';
 import { BookingScheduleTable } from '@/components/admin/BookingScheduleTable';
 import { CompanyBookingStatus } from '@/components/admin/CompanyBookingStatus';
 import { ForceBookingModal } from '@/components/admin/ForceBookingModal';
+import { SlotDetailModal } from '@/components/admin/SlotDetailModal';
+import { Tabs } from '@/components/common/Tabs';
+import { useFields } from '@/hooks/useFields';
 import { computeBookingStats } from '@/lib/booking';
 import type {
   AssignableUser,
@@ -26,7 +29,18 @@ interface BookingStatsPanelProps {
   eventId?: string;
   /** 빈 슬롯 클릭 → 강제 배정 허용 여부(관리 권한 && 미잠금). */
   forceAssignEnabled?: boolean;
+  /** 예약 배치 현황 표의 "새로고침" — 슬롯 데이터만 다시 로드. */
+  onRefresh?: () => void;
+  /** 새로고침 진행 중 표시. */
+  refreshing?: boolean;
 }
+
+type BookingSubTab = 'schedule' | 'companies';
+
+const SUB_TABS = [
+  { value: 'schedule', label: '예약 배치 현황' },
+  { value: 'companies', label: '기업별 배치 현황' },
+] as const;
 
 /**
  * 예약 현황 통계 대시보드(BOOKING) (page_admin_event_detail.md §2.2).
@@ -41,6 +55,8 @@ export function BookingStatsPanel({
   maxSessions,
   eventId,
   forceAssignEnabled = false,
+  onRefresh,
+  refreshing = false,
 }: BookingStatsPanelProps) {
   // 강제 배정 모달: open + 미리 선택할 슬롯(빈 슬롯 클릭) / 스타트업(기업별 배치 현황 + 배정).
   const [force, setForce] = useState<{
@@ -48,6 +64,17 @@ export function BookingStatsPanel({
     slot: MatchingSlotRow | null;
     startupId: string | null;
   }>({ open: false, slot: null, startupId: null });
+  // 예약된 셀 클릭 → 상담 신청 상세 모달.
+  const [detailSlot, setDetailSlot] = useState<MatchingSlotRow | null>(null);
+  const [subTab, setSubTab] = useState<BookingSubTab>('schedule');
+
+  // 분야 id → 이름(전문가 행 소속 아래 분야 태그 표시용).
+  const { data: fields } = useFields();
+  const fieldNameById = useMemo(
+    () => new Map((fields ?? []).map((f) => [f.id, f.name])),
+    [fields],
+  );
+
   const startupIds = useMemo(
     () => participants.filter((p) => p.participant_type === 'STARTUP').map((p) => p.user_id),
     [participants],
@@ -110,18 +137,31 @@ export function BookingStatsPanel({
         )}
       </StatCardSection>
 
-      <BookingScheduleTable
-        slots={slots}
-        participants={participants}
-        tables={tables}
-        userById={userById}
-        timezone={timezone}
-        onSelectEmptySlot={
-          canForceAssign ? (slot) => setForce({ open: true, slot, startupId: null }) : undefined
-        }
+      <Tabs<BookingSubTab>
+        value={subTab}
+        options={SUB_TABS}
+        onChange={setSubTab}
+        ariaLabel="예약 관리 상세 서브 탭"
       />
 
-      {eventId && (
+      {subTab === 'schedule' && (
+        <BookingScheduleTable
+          slots={slots}
+          participants={participants}
+          tables={tables}
+          userById={userById}
+          fieldNameById={fieldNameById}
+          timezone={timezone}
+          onSelectEmptySlot={
+            canForceAssign ? (slot) => setForce({ open: true, slot, startupId: null }) : undefined
+          }
+          onOpenDetail={setDetailSlot}
+          onRefresh={onRefresh}
+          refreshing={refreshing}
+        />
+      )}
+
+      {subTab === 'companies' && eventId && (
         <CompanyBookingStatus
           eventId={eventId}
           slots={slots}
@@ -152,6 +192,14 @@ export function BookingStatsPanel({
           initialStartupId={force.startupId}
         />
       )}
+
+      <SlotDetailModal
+        slot={detailSlot}
+        startup={detailSlot?.startup_id ? userById.get(detailSlot.startup_id) : undefined}
+        expert={detailSlot ? userById.get(detailSlot.expert_id) : undefined}
+        timezone={timezone}
+        onClose={() => setDetailSlot(null)}
+      />
     </div>
   );
 }

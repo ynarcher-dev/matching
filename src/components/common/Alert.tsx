@@ -10,19 +10,19 @@ interface AlertProps {
 
 /**
  * 상태 안내 박스 (page_auth_layout.md §2.1).
- * 굵은 사각 테두리 대신 연한 상태 배경 + 왼쪽 강조선 + 아이콘으로 위계를 만든다.
+ * 연한 상태 배경 + 아이콘으로 위계를 만든다(좌측 강조바 없이 옅은 배경만 사용).
  */
 const TONE: Record<AlertTone, { box: string; icon: ReactNode }> = {
   error: {
-    box: 'border-l-brand bg-danger-surface text-brand',
+    box: 'border-danger-border bg-danger-surface text-brand',
     icon: <ExclamationIcon />,
   },
   info: {
-    box: 'border-l-neutral-base bg-info-surface text-neutral-base',
+    box: 'border-danger-border bg-danger-surface text-brand',
     icon: <InfoIcon />,
   },
   success: {
-    box: 'border-l-neutral-base bg-muted text-neutral-base',
+    box: 'border-border bg-muted text-neutral-base',
     icon: <CheckIcon />,
   },
 };
@@ -32,7 +32,7 @@ export function Alert({ tone = 'info', children, className = '' }: AlertProps) {
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
-      className={`flex items-start gap-2 rounded-md border-l-4 px-3 py-2 text-sm font-medium ${box} ${className}`}
+      className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm font-medium ${box} ${className}`}
     >
       <span className="mt-0.5 shrink-0" aria-hidden="true">
         {icon}

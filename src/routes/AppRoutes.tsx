@@ -13,8 +13,10 @@ import { EventDetailView } from '@/views/admin/EventDetailView';
 import { AiAllocationView } from '@/views/admin/AiAllocationView';
 import { ParticipantDbView } from '@/views/admin/ParticipantDbView';
 import { StartupPortalView } from '@/views/startup/StartupPortalView';
+import { StartupProposalView } from '@/views/startup/StartupProposalView';
+import { StartupNoticesView } from '@/views/startup/StartupNoticesView';
 import { ExpertDashboardView } from '@/views/expert/ExpertDashboardView';
-import { ExpertHistoryView } from '@/views/expert/ExpertHistoryView';
+import { ExpertNoticesView } from '@/views/expert/ExpertNoticesView';
 import { StaffPhotosView } from '@/views/staff/StaffPhotosView';
 import { NotificationSettingsView } from '@/views/admin/NotificationSettingsView';
 import { OperatorListView } from '@/views/admin/OperatorListView';
@@ -64,16 +66,14 @@ export function AppRoutes() {
           {/* 전문가 */}
           <Route element={<RequireRole allow={['EXPERT']} />}>
             <Route path="/expert/dashboard" element={<ExpertDashboardView />} />
-            <Route path="/expert/history" element={<ExpertHistoryView />} />
+            <Route path="/expert/notices" element={<ExpertNoticesView />} />
           </Route>
 
           {/* 스타트업 */}
           <Route element={<RequireRole allow={['STARTUP']} />}>
             <Route path="/startup/booking" element={<StartupPortalView />} />
-            <Route
-              path="/startup/notices"
-              element={<PlaceholderView title="안내 사항" description="행사 안내 및 공지." />}
-            />
+            <Route path="/startup/proposals" element={<StartupProposalView />} />
+            <Route path="/startup/notices" element={<StartupNoticesView />} />
           </Route>
         </Route>
       </Route>

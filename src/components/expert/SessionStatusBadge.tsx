@@ -23,7 +23,11 @@ const ICON: Record<SessionStatus, string> = {
 /** 세션 진행 상태 배지(색상+아이콘+한국어 라벨). 9-B: 공통 Badge 사용. */
 export function SessionStatusBadge({ status }: { status: SessionStatus }) {
   return (
-    <Badge tone={STATUS_TONE[status]} icon={ICON[status]}>
+    <Badge
+      tone={STATUS_TONE[status]}
+      icon={ICON[status]}
+      className="min-w-[72px] justify-center"
+    >
       {SESSION_STATUS_LABELS[status]}
     </Badge>
   );

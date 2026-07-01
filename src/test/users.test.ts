@@ -158,14 +158,18 @@ describe('validateParticipantFile', () => {
     ).toContain('용량');
   });
 
-  it('전문가는 5MB 이하 이미지(jpg/png/webp)만 허용한다', () => {
+  it('전문가는 원본 고화질 이미지(jpg/png/webp, 50MB 이하)만 허용한다', () => {
     expect(validateParticipantFile('EXPERT', fakeFile('a.png', 'image/png', 1024))).toBeNull();
     expect(validateParticipantFile('EXPERT', fakeFile('a.webp', 'image/webp', 1024))).toBeNull();
+    // 고해상도 원본(6MB)도 압축 없이 그대로 허용한다.
+    expect(
+      validateParticipantFile('EXPERT', fakeFile('a.png', 'image/png', 6 * 1024 * 1024)),
+    ).toBeNull();
     expect(
       validateParticipantFile('EXPERT', fakeFile('a.pdf', 'application/pdf', 1024)),
     ).toContain('형식');
     expect(
-      validateParticipantFile('EXPERT', fakeFile('a.png', 'image/png', 6 * 1024 * 1024)),
+      validateParticipantFile('EXPERT', fakeFile('a.png', 'image/png', 51 * 1024 * 1024)),
     ).toContain('용량');
   });
 });

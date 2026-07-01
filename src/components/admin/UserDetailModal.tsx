@@ -8,6 +8,7 @@ import { SelectField } from '@/components/common/SelectField';
 import { Alert } from '@/components/common/Alert';
 import { FieldTagInput } from '@/components/admin/FieldTagInput';
 import { ParticipantFileInput } from '@/components/admin/ParticipantFileInput';
+import { ExpertAvatarField } from '@/components/admin/ExpertAvatarField';
 import { ProposalHistoryTimeline } from '@/components/admin/ProposalHistoryTimeline';
 import { participantFormSchema } from '@/schemas/userSchemas';
 import type { ParticipantFormValues } from '@/schemas/userSchemas';
@@ -225,12 +226,20 @@ export function UserDetailModal({ open, onClose, user, defaultRole }: UserDetail
           error={errors.field_ids?.message}
         />
 
-        {/* 첨부는 스타트업 소개서만 받는다(전문가 프로필 사진 업로드는 미사용). */}
-        {role === 'STARTUP' && (
+        {/* 첨부: 스타트업=사업소개서 PDF, 전문가=프로필 사진(원형 미리보기·기본 사람 아이콘). */}
+        {role === 'STARTUP' ? (
           <ParticipantFileInput
             role={role}
             currentPath={currentFilePath}
             userId={user?.id ?? null}
+            file={file}
+            onFileChange={setFile}
+            removeRequested={removeFile}
+            onRemoveChange={setRemoveFile}
+          />
+        ) : (
+          <ExpertAvatarField
+            currentPath={currentFilePath}
             file={file}
             onFileChange={setFile}
             removeRequested={removeFile}
