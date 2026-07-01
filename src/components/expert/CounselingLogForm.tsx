@@ -18,6 +18,7 @@ import {
   useSaveCounselingDraft,
   useSubmitCounselingLog,
 } from '@/hooks/useExpertPortal';
+import { toast } from '@/stores/toastStore';
 import type { CounselingAnswerValue, CounselingDraft } from '@/lib/counseling';
 import type { CounselingQuestion } from '@/types/counselingLog';
 import type { MatchingSlotRow } from '@/types/eventDetail';
@@ -198,11 +199,14 @@ export function CounselingLogForm({
   slot,
   eventId,
   onSubmitted,
+  onSaved,
 }: {
   slot: MatchingSlotRow;
   eventId: string;
   /** 최종 제출 성공 콜백(워크스페이스에서 다음 액션 처리). */
   onSubmitted?: () => void;
+  /** 수동 임시저장 성공 콜백 — 저장과 동시에 이전 페이지로 복귀시킨다. */
+  onSaved?: () => void;
 }) {
   const slotId = slot.id;
   const questionsQ = useCounselingLogQuestions(eventId, true);
@@ -279,11 +283,6 @@ export function CounselingLogForm({
     setDraft((d) => ({ ...d, answers: { ...d.answers, [qid]: next } }));
   };
 
-  const mutationError =
-    (submitM.isError && (submitM.error as Error).message) ||
-    (reopenM.isError && (reopenM.error as Error).message) ||
-    null;
-
   const handleManualSave = () => {
     setFormError(null);
     dirtyRef.current = false;
@@ -291,8 +290,16 @@ export function CounselingLogForm({
     saveM.mutate(
       { slotId, questions, draft },
       {
-        onSuccess: () => setSaveState({ kind: 'saved' }),
-        onError: (e) => setSaveState({ kind: 'error', message: (e as Error).message }),
+        onSuccess: () => {
+          setSaveState({ kind: 'saved' });
+          toast.success('임시저장했습니다.');
+          // 저장과 동시에 이전 페이지(전체 일정)로 복귀.
+          onSaved?.();
+        },
+        onError: (e) => {
+          setSaveState({ kind: 'error', message: (e as Error).message });
+          toast.error('임시저장하지 못했습니다. 다시 시도해 주세요.');
+        },
       },
     );
   };
@@ -304,12 +311,30 @@ export function CounselingLogForm({
       setFormError(result.message);
       return;
     }
-    submitM.mutate({ slotId, questions, draft }, { onSuccess: () => onSubmitted?.() });
+    submitM.mutate(
+      { slotId, questions, draft },
+      {
+        onSuccess: () => {
+          toast.success('상담일지를 제출했습니다.');
+          onSubmitted?.();
+        },
+        onError: (e) =>
+          toast.error('상담일지를 제출하지 못했습니다. 필수 항목과 네트워크 상태를 확인해 주세요.', {
+            description: (e as Error).message,
+          }),
+      },
+    );
   };
 
   const handleReopen = () => {
     setFormError(null);
-    reopenM.mutate(slotId);
+    reopenM.mutate(slotId, {
+      onSuccess: () => toast.success('제출을 취소했습니다. 다시 편집할 수 있습니다.'),
+      onError: (e) =>
+        toast.error('제출을 취소하지 못했습니다. 다시 시도해 주세요.', {
+          description: (e as Error).message,
+        }),
+    });
   };
 
   if (loading) {
@@ -387,7 +412,7 @@ export function CounselingLogForm({
             )}
           </section>
 
-          {(formError || mutationError) && <Alert tone="error">{formError ?? mutationError}</Alert>}
+          {formError && <Alert tone="error">{formError}</Alert>}
         </div>
       </div>
 
@@ -430,7 +455,9 @@ export function CounselingLogForm({
 /** 자동저장 상태 텍스트(좌하단). */
 function AutosaveIndicator({ state, enabled }: { state: SaveState; enabled: boolean }) {
   if (!enabled) {
-    return <span className="text-xs text-neutral-base/45">자동저장 비활성 (대기/진행 세션만)</span>;
+    return (
+      <span className="text-xs text-neutral-base/45">대기/진행 세션에서만 자동저장됩니다.</span>
+    );
   }
   switch (state.kind) {
     case 'saving':
@@ -442,7 +469,7 @@ function AutosaveIndicator({ state, enabled }: { state: SaveState; enabled: bool
     case 'saved':
       return <span className="text-xs text-success">✓ 저장됨</span>;
     case 'error':
-      return <span className="text-xs text-brand">저장 실패: {state.message}</span>;
+      return <span className="text-xs text-brand">자동저장 실패: {state.message}</span>;
     default:
       return <span className="text-xs text-neutral-base/45">입력을 멈추면 자동 저장됩니다</span>;
   }

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-type AlertTone = 'error' | 'info' | 'success';
+type AlertTone = 'error' | 'warning' | 'info' | 'success';
 
 interface AlertProps {
   tone?: AlertTone;
@@ -15,6 +15,10 @@ interface AlertProps {
 const TONE: Record<AlertTone, { box: string; icon: ReactNode }> = {
   error: {
     box: 'border-danger-border bg-danger-surface text-brand',
+    icon: <ExclamationIcon />,
+  },
+  warning: {
+    box: 'border-warning-border bg-warning-surface text-warning',
     icon: <ExclamationIcon />,
   },
   info: {

@@ -7,6 +7,7 @@ import { SectionActionButton } from '@/components/common/ActionButton';
 import { TextField } from '@/components/common/TextField';
 import { Alert } from '@/components/common/Alert';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
+import { toast } from '@/stores/toastStore';
 import { slotGenerationSchema } from '@/schemas/eventDetailSchemas';
 import type { SlotGenerationValues } from '@/schemas/eventDetailSchemas';
 import { useGenerateSlots, useClearUnbookedSlots } from '@/hooks/useEventDetailMutations';
@@ -43,8 +44,6 @@ export function SlotGenerationPanel({
   const generate = useGenerateSlots(eventId);
   const clear = useClearUnbookedSlots(eventId);
   const [showClear, setShowClear] = useState(false);
-  const [createdCount, setCreatedCount] = useState<number | null>(null);
-  const [clearedCount, setClearedCount] = useState<number | null>(null);
 
   const expertCount = useMemo(
     () => participants.filter((p) => p.participant_type === 'EXPERT').length,
@@ -142,8 +141,6 @@ export function SlotGenerationPanel({
   ]);
 
   const onSubmit = handleSubmit((data) => {
-    setCreatedCount(null);
-    setClearedCount(null);
     const datePart = data.start_local.slice(0, 10);
     const mealStartsIso: string[] = [];
     const mealEndsIso: string[] = [];
@@ -163,7 +160,11 @@ export function SlotGenerationPanel({
         mealStartsIso,
         mealEndsIso,
       },
-      { onSuccess: (n) => setCreatedCount(n) },
+      {
+        onSuccess: (n) => toast.success(`슬롯 ${n}개를 생성했습니다.`),
+        onError: (e) =>
+          toast.error('슬롯을 생성하지 못했습니다.', { description: (e as Error).message }),
+      },
     );
   });
 
@@ -337,15 +338,7 @@ export function SlotGenerationPanel({
             </div>
           )}
 
-          {generate.isError && <Alert tone="error">{(generate.error as Error).message}</Alert>}
-          {createdCount !== null && !generate.isError && (
-            <Alert tone="success">슬롯 {createdCount}개를 생성했습니다.</Alert>
-          )}
         </form>
-      )}
-
-      {clearedCount !== null && !clear.isError && (
-        <Alert tone="success">빈 슬롯 {clearedCount}개를 삭제했습니다.</Alert>
       )}
 
       <ConfirmModal
@@ -355,14 +348,14 @@ export function SlotGenerationPanel({
         message="예약되지 않은 빈 슬롯을 모두 삭제합니다. 예약·진행 중인 슬롯은 유지됩니다."
         confirmLabel="초기화"
         loading={clear.isPending}
-        error={clear.isError ? (clear.error as Error).message : null}
         onConfirm={() => {
-          setCreatedCount(null);
           clear.mutate(undefined, {
             onSuccess: (n) => {
-              setClearedCount(n);
               setShowClear(false);
+              toast.success(`빈 슬롯 ${n}개를 삭제했습니다.`);
             },
+            onError: (e) =>
+              toast.error('빈 슬롯을 초기화하지 못했습니다.', { description: (e as Error).message }),
           });
         }}
       />

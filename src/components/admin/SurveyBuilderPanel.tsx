@@ -27,6 +27,7 @@ import {
   QUESTION_TYPE_OPTIONS,
 } from '@/lib/surveyBuilder';
 import { QUESTION_TYPE_LABEL } from '@/lib/satisfaction';
+import { toast } from '@/stores/toastStore';
 import { questionFormSchema } from '@/schemas/surveyBuilderSchemas';
 import type {
   SurveyQuestion,
@@ -365,11 +366,6 @@ export function SurveyBuilderPanel({
     [questions, activeRole],
   );
 
-  const saveError = createM.isError
-    ? (createM.error as Error).message
-    : updateM.isError
-      ? (updateM.error as Error).message
-      : null;
 
   const openNew = () => {
     setEditing(null);
@@ -387,10 +383,18 @@ export function SurveyBuilderPanel({
   };
 
   const handleSave = (input: SurveyQuestionInput) => {
+    const opts = {
+      onSuccess: () => {
+        closeEditor();
+        toast.success('문항을 저장했습니다.');
+      },
+      onError: (e: unknown) =>
+        toast.error('문항을 저장하지 못했습니다.', { description: (e as Error).message }),
+    };
     if (editing) {
-      updateM.mutate({ id: editing.id, input }, { onSuccess: closeEditor });
+      updateM.mutate({ id: editing.id, input }, opts);
     } else {
-      createM.mutate(input, { onSuccess: closeEditor });
+      createM.mutate(input, opts);
     }
   };
 
@@ -401,7 +405,10 @@ export function SurveyBuilderPanel({
     const updates = orderedIds
       .map((id, i) => ({ id, order_no: orderNos[i] }))
       .filter((u) => byId.get(u.id)?.order_no !== u.order_no);
-    if (updates.length > 0) reorderM.mutate(updates);
+    if (updates.length > 0)
+      reorderM.mutate(updates, {
+        onError: () => toast.error('순서를 변경하지 못했습니다. 다시 시도해 주세요.'),
+      });
   };
 
   if (questionsQ.isLoading || countQ.isLoading) {
@@ -433,11 +440,6 @@ export function SurveyBuilderPanel({
       {(questionsQ.isError || countQ.isError) && (
         <Alert tone="error">설문 정보를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
       )}
-      {reorderM.isError && (
-        <Alert tone="error">순서를 변경하지 못했습니다. 다시 시도해 주세요.</Alert>
-      )}
-      {deleteM.isError && <Alert tone="error">{(deleteM.error as Error).message}</Alert>}
-      {templateM.isError && <Alert tone="error">{(templateM.error as Error).message}</Alert>}
 
       {/* 문항 목록 (행사·전문가 만족도 모두 스타트업 단일 대상) */}
       {roleQuestions.length === 0 ? (
@@ -450,6 +452,13 @@ export function SurveyBuilderPanel({
               onClick={() =>
                 templateM.mutate(
                   isExpertScope ? defaultExpertTemplate() : defaultTemplate('STARTUP'),
+                  {
+                    onSuccess: () => toast.success('기본 문항을 불러왔습니다.'),
+                    onError: (e) =>
+                      toast.error('기본 문항을 불러오지 못했습니다.', {
+                        description: (e as Error).message,
+                      }),
+                  },
                 )
               }
             >
@@ -485,7 +494,7 @@ export function SurveyBuilderPanel({
         onClose={closeEditor}
         onSave={handleSave}
         loading={createM.isPending || updateM.isPending}
-        error={saveError}
+        error={null}
       />
 
       <ConfirmModal
@@ -497,7 +506,6 @@ export function SurveyBuilderPanel({
         title="문항 삭제"
         confirmLabel="삭제"
         loading={deleteM.isPending}
-        error={deleteM.isError ? (deleteM.error as Error).message : null}
         message={
           deleteTarget ? (
             <>
@@ -507,7 +515,14 @@ export function SurveyBuilderPanel({
         }
         onConfirm={() => {
           if (!deleteTarget) return;
-          deleteM.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) });
+          deleteM.mutate(deleteTarget.id, {
+            onSuccess: () => {
+              setDeleteTarget(null);
+              toast.success('문항을 삭제했습니다.');
+            },
+            onError: (e) =>
+              toast.error('문항을 삭제하지 못했습니다.', { description: (e as Error).message }),
+          });
         }}
       />
     </Root>

@@ -234,6 +234,7 @@ export function BookingSlotsGrid({
           canBook={canBook}
           onBook={onBook}
           fillWidth={enlarged}
+          search={search}
         />
       )}
     </Card>

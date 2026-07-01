@@ -2,9 +2,11 @@ import { useRef, useState } from 'react';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { Button } from '@/components/common/Button';
+import { EmptyState } from '@/components/common/EmptyState';
 import { participantClient } from '@/lib/participantClient';
 import { BUCKET_SPEC, createSignedUrlWithClient, validateParticipantFile } from '@/lib/storage';
 import { formatDateTime } from '@/lib/datetime';
+import { toast } from '@/stores/toastStore';
 import { useMyProposal, useSetMyProposal } from '@/hooks/useStartupPortal';
 
 interface ProposalUploadPanelProps {
@@ -43,28 +45,41 @@ export function ProposalUploadPanel({ userId, timezone }: ProposalUploadPanelPro
       setLocalError(msg);
       return;
     }
-    setM.mutate({ file: selected });
+    const replacing = hasCurrent;
+    setM.mutate(
+      { file: selected },
+      {
+        onSuccess: () =>
+          toast.success(replacing ? '소개서를 교체했습니다.' : '소개서를 업로드했습니다.'),
+        onError: (e) =>
+          toast.error('소개서를 업로드하지 못했습니다.', { description: (e as Error).message }),
+      },
+    );
   };
 
   const openCurrent = async () => {
     if (!current?.filePath) return;
-    setLocalError(null);
     setViewing(true);
     try {
       const url = await createSignedUrlWithClient(participantClient, current.filePath, 120);
       window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (e) {
-      setLocalError((e as Error).message);
+    } catch {
+      toast.error('파일을 열지 못했습니다. 다시 시도해 주세요.');
     } finally {
       setViewing(false);
     }
   };
 
   const remove = () => {
-    setM.mutate({ clear: true, currentPath: current?.filePath ?? null });
+    setM.mutate(
+      { clear: true, currentPath: current?.filePath ?? null },
+      {
+        onSuccess: () => toast.success('소개서 제출을 취소했습니다.'),
+        onError: (e) =>
+          toast.error('소개서 제출을 취소하지 못했습니다.', { description: (e as Error).message }),
+      },
+    );
   };
-
-  const mutationError = setM.isError ? (setM.error as Error).message : null;
 
   return (
     <Card className="flex flex-col gap-3 p-5">
@@ -129,19 +144,20 @@ export function ProposalUploadPanel({ userId, timezone }: ProposalUploadPanelPro
         </div>
       ) : (
         !proposalQ.isLoading && (
-          <div className="flex flex-col items-start gap-3">
-            <Alert tone="info">
-              아직 제출된 소개서가 없습니다. PDF 파일을 업로드해 주세요.
-            </Alert>
-            <Button type="button" onClick={openPicker} loading={setM.isPending}>
-              파일 업로드
-            </Button>
-          </div>
+          <EmptyState
+            icon="📄"
+            title="제출된 소개서가 없습니다."
+            description="상담 전 사업소개서(PDF)를 업로드해 주세요."
+            action={
+              <Button type="button" onClick={openPicker} loading={setM.isPending}>
+                파일 업로드
+              </Button>
+            }
+          />
         )
       )}
 
       {localError && <p className="text-sm font-medium text-brand">{localError}</p>}
-      {mutationError && <p className="text-sm font-medium text-brand">{mutationError}</p>}
     </Card>
   );
 }

@@ -4,6 +4,7 @@ import { Alert } from '@/components/common/Alert';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
+import { SearchInput } from '@/components/common/FilterBar';
 import { StatBox } from '@/components/common/StatBox';
 import { StatCardSection } from '@/components/common/StatCardSection';
 import { TimeGridSheet } from '@/components/admin/TimeGridSheet';
@@ -20,6 +21,7 @@ import {
 import { useEventOperators } from '@/hooks/useOperators';
 import { useEventCompanyPhotos } from '@/hooks/useCompanyPhotos';
 import { useFields } from '@/hooks/useFields';
+import { toast } from '@/stores/toastStore';
 import { computeProgressStats } from '@/lib/booking';
 import { participantLabel, SESSION_STATUS_TONE } from '@/lib/labels';
 import { Badge } from '@/components/common/Badge';
@@ -144,6 +146,7 @@ export function ProgressDashboardPanel({
   );
 
   const [photoFilter, setPhotoFilter] = useState(false);
+  const [search, setSearch] = useState('');
   // 크게보기: 이 그리드 카드만 화면 전체로 확대(풀스크린 오버레이).
   const [enlarged, setEnlarged] = useState(false);
   const [photoTarget, setPhotoTarget] = useState<string | null>(null);
@@ -175,9 +178,6 @@ export function ProgressDashboardPanel({
   }, [photoTarget, userById]);
 
   const pending = noShow.isPending || setSessionStatus.isPending;
-  const actionError = setSessionStatus.isError
-    ? (setSessionStatus.error as Error).message
-    : null;
 
   const noShowStartup = noShowTarget?.startup_id
     ? userById.get(noShowTarget.startup_id)
@@ -219,6 +219,12 @@ export function ProgressDashboardPanel({
           <Legend tone={SESSION_STATUS_TONE.IN_PROGRESS} label="진행중" />
           <Legend tone={SESSION_STATUS_TONE.COMPLETED} label="완료" />
           <Legend tone={SESSION_STATUS_TONE.NO_SHOW} label="노쇼" />
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="전문가·기업·대표·테이블 검색"
+            widthClass="max-w-sm"
+          />
           <div className="ml-auto flex items-center gap-1.5">
             <Button
               variant="outline"
@@ -247,7 +253,6 @@ export function ProgressDashboardPanel({
         {slotsQ.isError && (
           <Alert tone="error">슬롯을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</Alert>
         )}
-        {actionError && <Alert tone="error">{actionError}</Alert>}
 
         <TimeGridSheet
           fieldNameById={fieldNameById}
@@ -262,7 +267,16 @@ export function ProgressDashboardPanel({
           photoFilter={photoFilter}
           onMarkNoShow={setNoShowTarget}
           onSetSessionStatus={(slot, status) =>
-            setSessionStatus.mutate({ slotId: slot.id, status })
+            setSessionStatus.mutate(
+              { slotId: slot.id, status },
+              {
+                onSuccess: () => toast.success('세션 상태를 변경했습니다.'),
+                onError: (e) =>
+                  toast.error('세션 상태를 변경하지 못했습니다.', {
+                    description: (e as Error).message,
+                  }),
+              },
+            )
           }
           onReplaceNoShow={setReplaceTarget}
           onOpenPhotos={(slot) => slot.startup_id && setPhotoTarget(slot.startup_id)}
@@ -270,6 +284,7 @@ export function ProgressDashboardPanel({
           operators={managerOptions}
           managerByTable={managerByTable}
           fillWidth={enlarged}
+          search={search}
         />
       </Card>
 
@@ -286,12 +301,18 @@ export function ProgressDashboardPanel({
         requireReason
         reasonLabel="노쇼 사유"
         loading={noShow.isPending}
-        error={noShow.isError ? (noShow.error as Error).message : null}
         onConfirm={(reason) => {
           if (noShowTarget) {
             noShow.mutate(
               { slotId: noShowTarget.id, reason },
-              { onSuccess: () => setNoShowTarget(null) },
+              {
+                onSuccess: () => {
+                  setNoShowTarget(null);
+                  toast.success('노쇼 처리했습니다.');
+                },
+                onError: (e) =>
+                  toast.error('노쇼 처리하지 못했습니다.', { description: (e as Error).message }),
+              },
             );
           }
         }}
@@ -308,12 +329,18 @@ export function ProgressDashboardPanel({
         tables={tables}
         timezone={timezone}
         loading={replaceNoShow.isPending}
-        error={replaceNoShow.isError ? (replaceNoShow.error as Error).message : null}
         onConfirm={(startupId: string, reason: string) => {
           if (replaceTarget) {
             replaceNoShow.mutate(
               { slotId: replaceTarget.id, startupId, reason },
-              { onSuccess: () => setReplaceTarget(null) },
+              {
+                onSuccess: () => {
+                  setReplaceTarget(null);
+                  toast.success('대체 매칭을 완료했습니다.');
+                },
+                onError: (e) =>
+                  toast.error('대체 매칭하지 못했습니다.', { description: (e as Error).message }),
+              },
             );
           }
         }}

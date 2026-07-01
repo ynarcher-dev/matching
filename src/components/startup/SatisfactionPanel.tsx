@@ -4,6 +4,7 @@ import { Alert } from '@/components/common/Alert';
 import { Button } from '@/components/common/Button';
 import { Spinner } from '@/components/common/Spinner';
 import { QuestionField, SubmittedField } from '@/components/startup/surveyFields';
+import { toast } from '@/stores/toastStore';
 import { useMySurveyResponse, useSubmitSurvey, useSurveyQuestions } from '@/hooks/useSatisfaction';
 import { validateSurvey } from '@/lib/satisfaction';
 import type { SurveyAnswerRow, SurveyDraft } from '@/types/satisfaction';
@@ -23,7 +24,6 @@ export function SatisfactionPanel({ eventId }: { eventId: string }) {
 
   const questions = useMemo(() => questionsQ.data ?? [], [questionsQ.data]);
   const response = responseQ.data ?? null;
-  const submitError = submitM.isError ? (submitM.error as Error).message : null;
 
   const answerByQ = useMemo(() => {
     const m = new Map<string, SurveyAnswerRow>();
@@ -55,9 +55,7 @@ export function SatisfactionPanel({ eventId }: { eventId: string }) {
     return (
       <Card className="flex flex-col gap-4 p-5">
         {heading}
-        <Alert tone="success">
-          만족도 조사를 제출해 주셔서 감사합니다. 제출한 응답은 수정할 수 없습니다.
-        </Alert>
+        <Alert tone="success">제출한 응답은 수정할 수 없습니다.</Alert>
         {questions.map((q) => (
           <SubmittedField key={q.id} q={q} answer={answerByQ.get(q.id)} />
         ))}
@@ -81,7 +79,11 @@ export function SatisfactionPanel({ eventId }: { eventId: string }) {
       setFormError(result.message);
       return;
     }
-    submitM.mutate(result.payload);
+    submitM.mutate(result.payload, {
+      onSuccess: () => toast.success('만족도 조사를 제출했습니다.'),
+      onError: (e) =>
+        toast.error('만족도 조사를 제출하지 못했습니다.', { description: (e as Error).message }),
+    });
   };
 
   return (
@@ -100,7 +102,7 @@ export function SatisfactionPanel({ eventId }: { eventId: string }) {
         />
       ))}
 
-      {(formError || submitError) && <Alert tone="error">{formError ?? submitError}</Alert>}
+      {formError && <Alert tone="error">{formError}</Alert>}
 
       <div className="flex justify-end">
         <Button onClick={handleSubmit} loading={submitM.isPending}>

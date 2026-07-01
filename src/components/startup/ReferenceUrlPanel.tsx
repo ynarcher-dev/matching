@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { Button } from '@/components/common/Button';
+import { toast } from '@/stores/toastStore';
 import {
   useAddCompanyLink,
   useDeleteCompanyLink,
@@ -40,7 +41,7 @@ export function ReferenceUrlPanel({ userId }: ReferenceUrlPanelProps) {
   const add = () => {
     setLocalError(null);
     if (!url.trim()) {
-      setLocalError('URL 을 입력해 주세요.');
+      setLocalError('URL을 입력해 주세요.');
       return;
     }
     addM.mutate(
@@ -49,13 +50,21 @@ export function ReferenceUrlPanel({ userId }: ReferenceUrlPanelProps) {
         onSuccess: () => {
           setUrl('');
           setLabel('');
+          toast.success('참고 URL을 추가했습니다.');
         },
+        onError: (e) =>
+          toast.error('참고 URL을 추가하지 못했습니다.', { description: (e as Error).message }),
       },
     );
   };
 
-  const addError = addM.isError ? (addM.error as Error).message : null;
-  const deleteError = deleteM.isError ? (deleteM.error as Error).message : null;
+  const removeLink = (id: string) => {
+    deleteM.mutate(id, {
+      onSuccess: () => toast.success('참고 URL을 삭제했습니다.'),
+      onError: (e) =>
+        toast.error('참고 URL을 삭제하지 못했습니다.', { description: (e as Error).message }),
+    });
+  };
 
   return (
     <Card className="flex flex-col gap-3 p-5">
@@ -68,7 +77,7 @@ export function ReferenceUrlPanel({ userId }: ReferenceUrlPanelProps) {
       </div>
 
       {linksQ.isError && (
-        <Alert tone="error">참고 URL 을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
+        <Alert tone="error">참고 URL을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
       )}
 
       {/* 등록된 링크 목록 */}
@@ -78,7 +87,7 @@ export function ReferenceUrlPanel({ userId }: ReferenceUrlPanelProps) {
             <LinkRow
               key={link.id}
               link={link}
-              onDelete={() => deleteM.mutate(link.id)}
+              onDelete={() => removeLink(link.id)}
               deleting={deleteM.isPending}
             />
           ))}
@@ -113,8 +122,6 @@ export function ReferenceUrlPanel({ userId }: ReferenceUrlPanelProps) {
       </div>
 
       {localError && <p className="text-sm font-medium text-brand">{localError}</p>}
-      {addError && <p className="text-sm font-medium text-brand">{addError}</p>}
-      {deleteError && <p className="text-sm font-medium text-brand">{deleteError}</p>}
     </Card>
   );
 }

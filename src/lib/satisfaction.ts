@@ -74,7 +74,7 @@ export function validateSurvey(
     const answered = isAnswered(q, draft);
 
     if (q.is_required && !answered) {
-      return { ok: false, questionId: q.id, message: `필수 항목입니다: ${q.title}` };
+      return { ok: false, questionId: q.id, message: `${q.title} 문항에 응답해 주세요.` };
     }
     if (!answered) continue;
 
@@ -100,7 +100,11 @@ export function validateSurvey(
       case 'MULTIPLE_CHOICE': {
         const sel = v.selections ?? [];
         if (q.question_type === 'SINGLE_CHOICE' && sel.length !== 1) {
-          return { ok: false, questionId: q.id, message: `${q.title}: 하나만 선택해 주세요.` };
+          return {
+            ok: false,
+            questionId: q.id,
+            message: `${q.title} 문항은 하나만 선택할 수 있습니다.`,
+          };
         }
         const options = q.options ?? [];
         if (sel.some((s) => !options.includes(s))) {

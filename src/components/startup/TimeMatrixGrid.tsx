@@ -21,11 +21,18 @@ interface TimeMatrixGridProps {
   onBook: (slot: MatchingSlotRow) => void;
   /** 크게보기(풀스크린): 스크롤 영역을 부모 남은 높이로 꽉 채운다. */
   fillWidth?: boolean;
+  /** 전문가·소속·테이블·분야 키워드 검색어. 일치 행의 슬롯을 강조한다. */
+  search?: string;
 }
 
 /** 시각만(HH:mm) 표기. */
 function hhmm(iso: string, tz: string): string {
   return formatDateTime(iso, tz).slice(-5);
+}
+
+function includesSearch(text: string, search: string): boolean {
+  const q = search.trim().toLowerCase();
+  return q.length > 0 && text.toLowerCase().includes(q);
 }
 
 /**
@@ -44,6 +51,7 @@ export function TimeMatrixGrid({
   canBook,
   onBook,
   fillWidth = false,
+  search = '',
 }: TimeMatrixGridProps) {
   const expertById = useMemo(() => new Map(experts.map((e) => [e.userId, e])), [experts]);
   const { columns, byExpert } = useMemo(() => buildBookingSchedule(slots), [slots]);
@@ -128,9 +136,17 @@ export function TimeMatrixGrid({
         <tbody>
           {expertRows.map((row) => {
             const cells = byExpert.get(row.expertId);
+            const rowSearchMatched = includesSearch(
+              [row.tableCode, row.name, row.org ?? '', row.fields.join(' ')].join(' '),
+              search,
+            );
             return (
               <tr key={row.expertId} className="border-b border-border last:border-b-0">
-                <th className="sticky left-0 z-10 w-56 min-w-56 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle">
+                <th
+                  className={`sticky left-0 z-10 w-56 min-w-56 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle ${
+                    rowSearchMatched ? 'ring-2 ring-inset ring-brand' : ''
+                  }`}
+                >
                   <span className="flex items-center gap-1.5">
                     <TableTag code={row.tableCode} />
                     <span className="text-sm font-bold text-neutral-base">{row.name}</span>
@@ -173,7 +189,7 @@ export function TimeMatrixGrid({
                       }
                       className={`w-[96px] min-w-[96px] border-r border-border px-1 text-center align-middle text-[11px] font-bold outline-none transition-colors last:border-r-0 focus-visible:ring-2 focus-visible:ring-success ${
                         state === 'none' ? 'text-neutral-base/15' : meta.box
-                      }`}
+                      } ${rowSearchMatched && slot ? 'ring-2 ring-inset ring-brand' : ''}`}
                     >
                       {meta.label}
                     </td>

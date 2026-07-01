@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert } from '@/components/common/Alert';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { PhotoPicker } from '@/components/common/PhotoPicker';
+import { toast } from '@/stores/toastStore';
 import {
   PHOTO_ACCEPT_ATTR,
   PHOTO_MAX_PER_COMPANY,
@@ -35,7 +36,6 @@ export function CompanyPhotoUploadPanel({
 }) {
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<CompanyPhotoRow | null>(null);
 
   const upload = useUploadCompanyPhotos(eventId);
@@ -58,7 +58,6 @@ export function CompanyPhotoUploadPanel({
 
   const onPick = (list: FileList | null) => {
     setLocalError(null);
-    setResult(null);
     if (!list || list.length === 0) return;
     const remaining = PHOTO_MAX_PER_COMPANY - photos.length - pending.length;
     const next: PendingItem[] = [];
@@ -87,17 +86,22 @@ export function CompanyPhotoUploadPanel({
 
   const onUpload = async () => {
     if (pending.length === 0) return;
-    setResult(null);
-    const res = await upload.mutateAsync({
-      companyUserId: company.userId,
-      files: pending.map((p) => p.file),
-    });
-    resetPending();
-    setResult(
-      res.failed > 0
-        ? `${res.uploaded}장 업로드 완료, ${res.failed}장 실패. 실패분은 다시 시도해 주세요.`
-        : `${res.uploaded}장 업로드 완료.`,
-    );
+    try {
+      const res = await upload.mutateAsync({
+        companyUserId: company.userId,
+        files: pending.map((p) => p.file),
+      });
+      resetPending();
+      if (res.failed > 0) {
+        toast.warning(`사진 ${res.uploaded}장을 업로드했고 ${res.failed}장은 실패했습니다.`, {
+          description: '실패분은 다시 시도해 주세요.',
+        });
+      } else {
+        toast.success(`사진 ${res.uploaded}장을 업로드했습니다.`);
+      }
+    } catch (e) {
+      toast.error('사진을 업로드하지 못했습니다.', { description: (e as Error).message });
+    }
   };
 
   const urlMap = signed.data ?? new Map<string, string>();
@@ -119,10 +123,6 @@ export function CompanyPhotoUploadPanel({
       />
 
       {localError && <Alert tone="error">{localError}</Alert>}
-      {upload.isError && (
-        <Alert tone="error">업로드 중 오류가 발생했습니다. 다시 시도해 주세요.</Alert>
-      )}
-      {result && <Alert tone="info">{result}</Alert>}
 
       {/* 등록된 사진 */}
       <div>
@@ -169,11 +169,14 @@ export function CompanyPhotoUploadPanel({
         message="선택한 사진을 삭제합니다. 되돌릴 수 없습니다."
         confirmLabel="삭제"
         loading={remove.isPending}
-        error={remove.isError ? '삭제에 실패했습니다. 다시 시도해 주세요.' : null}
         onConfirm={async () => {
           if (!toDelete) return;
-          await remove.mutateAsync(toDelete);
-          setToDelete(null);
+          try {
+            await remove.mutateAsync(toDelete);
+            setToDelete(null);
+          } catch {
+            toast.error('삭제에 실패했습니다. 다시 시도해 주세요.');
+          }
         }}
       />
     </div>

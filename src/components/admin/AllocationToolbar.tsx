@@ -47,8 +47,8 @@ export function AllocationToolbar({
 
       <p className="text-sm text-neutral-base/80">
         미매칭 스타트업 <span className="font-bold text-brand">{summary.unmatched}</span>개사 대상{' '}
-        <span className="font-bold text-neutral-base">{summary.matched}</span>개의 자동 매칭 슬롯이
-        제안되었습니다.
+        <span className="font-bold text-neutral-base">{summary.matched}</span>개의 자동 매칭 슬롯을
+        제안했습니다.
         {summary.fieldMismatch > 0 && (
           <>
             {' '}

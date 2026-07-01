@@ -27,6 +27,7 @@ import {
   QUESTION_TYPE_LABEL,
   QUESTION_TYPE_OPTIONS,
 } from '@/lib/counselingBuilder';
+import { toast } from '@/stores/toastStore';
 import { counselingQuestionFormSchema } from '@/schemas/counselingBuilderSchemas';
 import type {
   CounselingQuestion,
@@ -349,12 +350,6 @@ export function CounselingBuilderPanel({
   const lockReason = editLockReason(status, answerCount);
   const editable = lockReason === null;
 
-  const saveError = createM.isError
-    ? (createM.error as Error).message
-    : updateM.isError
-      ? (updateM.error as Error).message
-      : null;
-
   const openNew = () => {
     setEditing(null);
     setEditorOpen(true);
@@ -371,10 +366,18 @@ export function CounselingBuilderPanel({
   };
 
   const handleSave = (input: CounselingQuestionInput) => {
+    const opts = {
+      onSuccess: () => {
+        closeEditor();
+        toast.success('문항을 저장했습니다.');
+      },
+      onError: (e: unknown) =>
+        toast.error('문항을 저장하지 못했습니다.', { description: (e as Error).message }),
+    };
     if (editing) {
-      updateM.mutate({ id: editing.id, input }, { onSuccess: closeEditor });
+      updateM.mutate({ id: editing.id, input }, opts);
     } else {
-      createM.mutate(input, { onSuccess: closeEditor });
+      createM.mutate(input, opts);
     }
   };
 
@@ -385,7 +388,10 @@ export function CounselingBuilderPanel({
     const updates = orderedIds
       .map((id, i) => ({ id, order_no: orderNos[i] }))
       .filter((u) => byId.get(u.id)?.order_no !== u.order_no);
-    if (updates.length > 0) reorderM.mutate(updates);
+    if (updates.length > 0)
+      reorderM.mutate(updates, {
+        onError: () => toast.error('순서를 변경하지 못했습니다. 다시 시도해 주세요.'),
+      });
   };
 
   if (questionsQ.isLoading || countQ.isLoading) {
@@ -416,11 +422,6 @@ export function CounselingBuilderPanel({
           상담일지 문항을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.
         </Alert>
       )}
-      {reorderM.isError && (
-        <Alert tone="error">순서를 변경하지 못했습니다. 다시 시도해 주세요.</Alert>
-      )}
-      {deleteM.isError && <Alert tone="error">{(deleteM.error as Error).message}</Alert>}
-      {templateM.isError && <Alert tone="error">{(templateM.error as Error).message}</Alert>}
 
       {questions.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border px-3 py-8">
@@ -429,7 +430,15 @@ export function CounselingBuilderPanel({
             <Button
               variant="outline"
               loading={templateM.isPending}
-              onClick={() => templateM.mutate(defaultTemplate())}
+              onClick={() =>
+                templateM.mutate(defaultTemplate(), {
+                  onSuccess: () => toast.success('기본 문항을 불러왔습니다.'),
+                  onError: (e) =>
+                    toast.error('기본 문항을 불러오지 못했습니다.', {
+                      description: (e as Error).message,
+                    }),
+                })
+              }
             >
               기본 문항 불러오기
             </Button>
@@ -461,7 +470,7 @@ export function CounselingBuilderPanel({
         onClose={closeEditor}
         onSave={handleSave}
         loading={createM.isPending || updateM.isPending}
-        error={saveError}
+        error={null}
       />
 
       <ConfirmModal
@@ -473,7 +482,6 @@ export function CounselingBuilderPanel({
         title="문항 삭제"
         confirmLabel="삭제"
         loading={deleteM.isPending}
-        error={deleteM.isError ? (deleteM.error as Error).message : null}
         message={
           deleteTarget ? (
             <>
@@ -489,7 +497,14 @@ export function CounselingBuilderPanel({
         }
         onConfirm={() => {
           if (!deleteTarget) return;
-          deleteM.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) });
+          deleteM.mutate(deleteTarget.id, {
+            onSuccess: () => {
+              setDeleteTarget(null);
+              toast.success('문항을 삭제했습니다.');
+            },
+            onError: (e) =>
+              toast.error('문항을 삭제하지 못했습니다.', { description: (e as Error).message }),
+          });
         }}
       />
     </Root>

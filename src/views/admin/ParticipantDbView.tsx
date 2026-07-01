@@ -18,6 +18,7 @@ import { useDataTable } from '@/hooks/useDataTable';
 import { useFields } from '@/hooks/useFields';
 import { useParticipants } from '@/hooks/useUsers';
 import { useSoftDeleteUser } from '@/hooks/useUserMutations';
+import { toast } from '@/stores/toastStore';
 import { PARTICIPANT_ROLE_LABELS } from '@/lib/labels';
 import type { ParticipantRole, ParticipantWithAuth } from '@/types/user';
 
@@ -179,7 +180,6 @@ export function ParticipantDbView({ role }: ParticipantDbViewProps) {
         title="참가자 DB 삭제"
         confirmLabel="DB 삭제"
         loading={softDelete.isPending}
-        error={softDelete.error ? (softDelete.error as Error).message : null}
         message={
           <>
             <span className="font-semibold">{deleteTarget?.name}</span> 님을 DB 목록에서 삭제합니다.
@@ -188,7 +188,14 @@ export function ParticipantDbView({ role }: ParticipantDbViewProps) {
         }
         onConfirm={() => {
           if (!deleteTarget) return;
-          softDelete.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) });
+          softDelete.mutate(deleteTarget.id, {
+            onSuccess: () => {
+              setDeleteTarget(null);
+              toast.success('참가자를 DB 목록에서 삭제했습니다.');
+            },
+            onError: (e) =>
+              toast.error('참가자를 삭제하지 못했습니다.', { description: (e as Error).message }),
+          });
         }}
       />
     </div>

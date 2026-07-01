@@ -13,6 +13,7 @@ import {
 } from '@/hooks/useSatisfaction';
 import { validateSurvey } from '@/lib/satisfaction';
 import { formatRange } from '@/lib/datetime';
+import { toast } from '@/stores/toastStore';
 import type {
   ConsultedExpertSlot,
   MyExpertSurveyResponse,
@@ -31,7 +32,6 @@ function SlotCard({
   onToggle,
   onSubmit,
   submitting,
-  submitError,
 }: {
   slot: ConsultedExpertSlot;
   questions: SurveyQuestion[];
@@ -41,7 +41,6 @@ function SlotCard({
   onToggle: () => void;
   onSubmit: (draft: SurveyDraft, onDone: () => void) => void;
   submitting: boolean;
-  submitError: string | null;
 }) {
   const [draft, setDraft] = useState<SurveyDraft>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -108,7 +107,7 @@ function SlotCard({
               onChange={(next) => setDraft((prev) => ({ ...prev, [q.id]: next }))}
             />
           ))}
-          {(formError || submitError) && <Alert tone="error">{formError ?? submitError}</Alert>}
+          {formError && <Alert tone="error">{formError}</Alert>}
           <div className="flex justify-end">
             <Button onClick={handleSubmit} loading={submitting}>
               제출
@@ -146,11 +145,6 @@ export function ExpertSatisfactionPanel({
     (responsesQ.data ?? []).forEach((r) => m.set(r.slot_id, r));
     return m;
   }, [responsesQ.data]);
-
-  const submitError =
-    submitM.isError && submitM.variables?.slotId === openSlot
-      ? (submitM.error as Error).message
-      : null;
 
   const heading = <h2 className="text-base font-bold text-neutral-base">전문가 만족도 조사</h2>;
 
@@ -209,7 +203,6 @@ export function ExpertSatisfactionPanel({
             open={openSlot === slot.slot_id}
             onToggle={() => setOpenSlot((prev) => (prev === slot.slot_id ? null : slot.slot_id))}
             submitting={submitM.isPending && submitM.variables?.slotId === slot.slot_id}
-            submitError={openSlot === slot.slot_id ? submitError : null}
             onSubmit={(draft, onDone) => {
               const result = validateSurvey(questions, draft);
               if (!result.ok) return;
@@ -219,7 +212,12 @@ export function ExpertSatisfactionPanel({
                   onSuccess: () => {
                     onDone();
                     setOpenSlot(null);
+                    toast.success('만족도 조사를 제출했습니다.');
                   },
+                  onError: (e) =>
+                    toast.error('만족도 조사를 제출하지 못했습니다.', {
+                      description: (e as Error).message,
+                    }),
                 },
               );
             }}

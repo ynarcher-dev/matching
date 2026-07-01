@@ -11,6 +11,7 @@ import { SatisfactionPanel } from '@/components/startup/SatisfactionPanel';
 import { ExpertSatisfactionPanel } from '@/components/startup/ExpertSatisfactionPanel';
 import { PublicCommentsPanel } from '@/components/startup/PublicCommentsPanel';
 import { useAuthStore } from '@/stores/authStore';
+import { toast } from '@/stores/toastStore';
 import { formatRange } from '@/lib/datetime';
 import {
   PORTAL_POLL_MS,
@@ -171,7 +172,6 @@ export function StartupPortalView() {
         title="상담 예약"
         confirmLabel="예약하기"
         loading={bookM.isPending}
-        error={bookM.isError ? (bookM.error as Error).message : null}
         message={
           bookTarget ? (
             <>
@@ -189,7 +189,14 @@ export function StartupPortalView() {
         }
         onConfirm={() => {
           if (!bookTarget) return;
-          bookM.mutate(bookTarget.id, { onSuccess: closeBook });
+          bookM.mutate(bookTarget.id, {
+            onSuccess: () => {
+              closeBook();
+              toast.success('상담 예약이 완료되었습니다.');
+            },
+            onError: (e) =>
+              toast.error('예약하지 못했습니다.', { description: (e as Error).message }),
+          });
         }}
       />
 
@@ -200,11 +207,20 @@ export function StartupPortalView() {
         title="예약 취소"
         confirmLabel="예약 취소"
         loading={cancelM.isPending}
-        error={cancelM.isError ? (cancelM.error as Error).message : null}
-        message="상담 일정을 취소하시겠습니까? 취소된 시간은 다른 기업이 즉시 예약할 수 있게 됩니다."
+        message="상담 일정을 취소할까요? 취소한 시간은 다른 기업이 바로 예약할 수 있습니다."
         onConfirm={(reason) => {
           if (!cancelTarget) return;
-          cancelM.mutate({ slotId: cancelTarget.id, reason }, { onSuccess: closeCancel });
+          cancelM.mutate(
+            { slotId: cancelTarget.id, reason },
+            {
+              onSuccess: () => {
+                closeCancel();
+                toast.success('예약을 취소했습니다.');
+              },
+              onError: (e) =>
+                toast.error('예약을 취소하지 못했습니다.', { description: (e as Error).message }),
+            },
+          );
         }}
       />
 
@@ -223,11 +239,19 @@ export function StartupPortalView() {
           if (!changeFrom) return;
           changeM.mutate(
             { fromSlotId: changeFrom.id, toSlotId },
-            { onSuccess: closeChange },
+            {
+              onSuccess: () => {
+                closeChange();
+                toast.success('예약 시간을 변경했습니다.');
+              },
+              onError: (e) =>
+                toast.error('예약 시간을 변경하지 못했습니다.', {
+                  description: (e as Error).message,
+                }),
+            },
           );
         }}
         loading={changeM.isPending}
-        error={changeM.isError ? (changeM.error as Error).message : null}
       />
     </div>
   );

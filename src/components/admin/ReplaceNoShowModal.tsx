@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
-import { Alert } from '@/components/common/Alert';
 import { conflictingStartupIds } from '@/lib/booking';
 import { companyName, participantLabel } from '@/lib/labels';
 import { formatDateTime } from '@/lib/datetime';
@@ -23,7 +22,6 @@ interface ReplaceNoShowModalProps {
   /** 대체 매칭 확정(상위가 replace_no_show 호출). */
   onConfirm: (startupId: string, reason: string) => void;
   loading: boolean;
-  error: string | null;
 }
 
 /**
@@ -40,7 +38,6 @@ export function ReplaceNoShowModal({
   timezone,
   onConfirm,
   loading,
-  error,
 }: ReplaceNoShowModalProps) {
   const [startupId, setStartupId] = useState('');
   const [reason, setReason] = useState('');
@@ -107,8 +104,6 @@ export function ReplaceNoShowModal({
       }
     >
       <div className="flex flex-col gap-3">
-        {error && <Alert tone="error">{error}</Alert>}
-
         {/* 대상 슬롯 컨텍스트 */}
         {slot && (
           <div className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-neutral-base">

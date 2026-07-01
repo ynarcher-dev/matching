@@ -4,7 +4,6 @@ import { Badge } from '@/components/common/Badge';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { SectionActionButton } from '@/components/common/ActionButton';
-import { Alert } from '@/components/common/Alert';
 import { Modal } from '@/components/common/Modal';
 import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { DataTable, type DataTableColumn } from '@/components/common/DataTable';
@@ -34,6 +33,7 @@ import {
   useRemoveParticipants,
 } from '@/hooks/useEventDetailMutations';
 import { useInvalidateSessions } from '@/hooks/useUserMutations';
+import { toast } from '@/stores/toastStore';
 import { PARTICIPANT_ROLE_LABELS } from '@/lib/labels';
 import type { SortValue } from '@/lib/dataTable';
 import type { AssignableUser, EventParticipantRow, EventTable } from '@/types/eventDetail';
@@ -316,7 +316,18 @@ function AddCandidatesModal({
   };
 
   const submit = () => {
-    add.mutate({ userIds: [...selected], type: role }, { onSuccess: close });
+    const count = selected.size;
+    add.mutate(
+      { userIds: [...selected], type: role },
+      {
+        onSuccess: () => {
+          close();
+          toast.success(`${count}명을 배정했습니다.`);
+        },
+        onError: (e) =>
+          toast.error('참가자를 배정하지 못했습니다.', { description: (e as Error).message }),
+      },
+    );
   };
 
   const columns = useMemo<DataTableColumn<AssignableUser>[]>(() => {
@@ -437,7 +448,6 @@ function AddCandidatesModal({
       }
     >
       <div className="flex flex-col gap-3">
-        {add.isError && <Alert tone="error">{(add.error as Error).message}</Alert>}
         {candidates.length === 0 ? (
           <p className="py-6 text-center text-sm text-neutral-base/60">
             추가할 수 있는 후보가 없습니다.
@@ -633,19 +643,37 @@ function CurrentList({
       return uid ? (bookingCountByUser.get(uid) ?? 0) > 0 : false;
     });
     if (hasBookings) setConfirmTarget({ kind: 'bulk', ids: selectedIds });
-    else removeMany.mutate(selectedIds, { onSuccess: clearSelected });
+    else
+      removeMany.mutate(selectedIds, {
+        onSuccess: () => {
+          clearSelected();
+          toast.success('선택한 참가자를 제외했습니다.');
+        },
+        onError: (e) =>
+          toast.error('참가자를 제외하지 못했습니다.', { description: (e as Error).message }),
+      });
   };
 
   const handleConfirmRemove = () => {
     if (!confirmTarget) return;
     if (confirmTarget.kind === 'single') {
-      remove.mutate(confirmTarget.participant.id, { onSuccess: () => setConfirmTarget(null) });
+      remove.mutate(confirmTarget.participant.id, {
+        onSuccess: () => {
+          setConfirmTarget(null);
+          toast.success('참가자를 제외했습니다.');
+        },
+        onError: (e) =>
+          toast.error('참가자를 제외하지 못했습니다.', { description: (e as Error).message }),
+      });
     } else {
       removeMany.mutate(confirmTarget.ids, {
         onSuccess: () => {
           clearSelected();
           setConfirmTarget(null);
+          toast.success('선택한 참가자를 제외했습니다.');
         },
+        onError: (e) =>
+          toast.error('참가자를 제외하지 못했습니다.', { description: (e as Error).message }),
       });
     }
   };
@@ -1042,13 +1070,6 @@ function CurrentList({
         confirmLabel="제외하고 배치 해제"
         onConfirm={handleConfirmRemove}
         loading={remove.isPending || removeMany.isPending}
-        error={
-          remove.error
-            ? (remove.error as Error).message
-            : removeMany.error
-              ? (removeMany.error as Error).message
-              : null
-        }
       />
       <UserDetailModal
         open={editTarget !== null}
@@ -1070,7 +1091,6 @@ function CurrentList({
         reasonLabel="무효화 사유"
         reasonPlaceholder="예: 현장 확인 후 기존 로그인 세션 차단"
         loading={invalidate.isPending}
-        error={invalidate.error ? (invalidate.error as Error).message : null}
         message={
           <>
             <span className="font-semibold">{invalidateTarget?.name}</span> 님의 기존 로그인 세션을
@@ -1081,7 +1101,14 @@ function CurrentList({
           if (!invalidateTarget) return;
           invalidate.mutate(
             { id: invalidateTarget.id, reason },
-            { onSuccess: () => setInvalidateTarget(null) },
+            {
+              onSuccess: () => {
+                setInvalidateTarget(null);
+                toast.success('세션을 무효화했습니다.');
+              },
+              onError: (e) =>
+                toast.error('세션을 무효화하지 못했습니다.', { description: (e as Error).message }),
+            },
           );
         }}
       />

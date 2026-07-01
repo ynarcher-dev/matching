@@ -3,6 +3,7 @@ import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
 import { Alert } from '@/components/common/Alert';
 import { useBulkCreateUsers } from '@/hooks/useUserMutations';
+import { toast } from '@/stores/toastStore';
 import { parseUserCsv, CSV_TEMPLATE } from '@/lib/userCsv';
 import type { CsvParseSummary } from '@/lib/userCsv';
 
@@ -55,7 +56,15 @@ export function CsvBulkUploader({ open, onClose, existingEmails }: CsvBulkUpload
 
   const onConfirm = () => {
     if (!summary || summary.errors.length > 0 || summary.rows.length === 0) return;
-    bulk.mutate(summary.rows, { onSuccess: () => onClose() });
+    const count = summary.rows.length;
+    bulk.mutate(summary.rows, {
+      onSuccess: () => {
+        onClose();
+        toast.success(`${count}명을 등록했습니다.`);
+      },
+      onError: (e) =>
+        toast.error('일괄 등록하지 못했습니다.', { description: (e as Error).message }),
+    });
   };
 
   const canSubmit =
@@ -122,8 +131,6 @@ export function CsvBulkUploader({ open, onClose, existingEmails }: CsvBulkUpload
             }}
           />
         </label>
-
-        {bulk.isError && <Alert tone="error">{(bulk.error as Error).message}</Alert>}
 
         {summary && <SummaryReport summary={summary} />}
       </div>

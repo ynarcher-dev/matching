@@ -5,10 +5,10 @@ import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
 import { TextField } from '@/components/common/TextField';
 import { SelectField } from '@/components/common/SelectField';
-import { Alert } from '@/components/common/Alert';
 import { operatorFormSchema } from '@/schemas/operatorSchemas';
 import type { OperatorFormValues } from '@/schemas/operatorSchemas';
 import { useCreateOperator, useUpdateOperator } from '@/hooks/useOperatorMutations';
+import { toast } from '@/stores/toastStore';
 import { OPERATOR_ROLE_LABELS } from '@/lib/labels';
 import type { Operator, OperatorSecretResult } from '@/types/operator';
 
@@ -51,7 +51,6 @@ export function OperatorFormModal({ open, onClose, operator, onCreated }: Operat
   const create = useCreateOperator();
   const update = useUpdateOperator();
   const pending = create.isPending || update.isPending;
-  const mutationError = (create.error ?? update.error) as Error | null;
 
   const {
     register,
@@ -86,7 +85,14 @@ export function OperatorFormModal({ open, onClose, operator, onCreated }: Operat
           active: operator.active,
           reason: values.reason,
         },
-        { onSuccess: () => onClose() },
+        {
+          onSuccess: () => {
+            onClose();
+            toast.success('운영자 정보를 저장했습니다.');
+          },
+          onError: (e) =>
+            toast.error('운영자 정보를 저장하지 못했습니다.', { description: (e as Error).message }),
+        },
       );
     } else {
       create.mutate(
@@ -100,9 +106,12 @@ export function OperatorFormModal({ open, onClose, operator, onCreated }: Operat
         },
         {
           onSuccess: (result) => {
+            // 생성 결과(임시 비번/링크)는 1회 노출 SecretModal 이 중심이라 성공 Toast 는 생략.
             onClose();
             onCreated(result, values.email);
           },
+          onError: (e) =>
+            toast.error('운영자를 생성하지 못했습니다.', { description: (e as Error).message }),
         },
       );
     }
@@ -125,8 +134,6 @@ export function OperatorFormModal({ open, onClose, operator, onCreated }: Operat
       }
     >
       <form id="operator-form" onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
-        {mutationError && <Alert tone="error">{mutationError.message}</Alert>}
-
         <TextField
           label="이메일(로그인 ID)"
           type="email"

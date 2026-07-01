@@ -49,6 +49,8 @@ interface TimeGridSheetProps {
   managerByTable: Map<string, string | null>;
   /** 크게보기: 표를 가로 전체로 늘려 화면을 꽉 채운다(열이 남은 폭을 나눠 갖는다). */
   fillWidth?: boolean;
+  /** 전문가·기업·대표자·테이블 키워드 검색어. */
+  search?: string;
 }
 
 /** 1열 담당자 셀렉트 옵션(행사 배정 오퍼레이터). */
@@ -68,6 +70,11 @@ const SESSION_CELL_TINT: Record<SessionStatus, string> = {
   NO_SHOW: 'bg-danger-surface',
   CANCELLED: 'bg-muted',
 };
+
+function includesSearch(text: string, search: string): boolean {
+  const q = search.trim().toLowerCase();
+  return q.length > 0 && text.toLowerCase().includes(q);
+}
 
 interface ExpertRow {
   expertId: string;
@@ -104,6 +111,7 @@ export function TimeGridSheet({
   operators,
   managerByTable,
   fillWidth = false,
+  search = '',
 }: TimeGridSheetProps) {
   const { columns, byExpert } = useMemo(() => buildBookingSchedule(slots), [slots]);
 
@@ -160,10 +168,43 @@ export function TimeGridSheet({
     );
   }, [byExpert, userById, fieldNameById, defaultTableByExpert, tableCodeById]);
 
+  const visibleExpertRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return expertRows;
+
+    return expertRows.filter((row) => {
+      const cells = byExpert.get(row.expertId);
+      const startupText = [...(cells?.values() ?? [])]
+        .map((slot) => {
+          const startup = slot.startup_id ? userById.get(slot.startup_id) : undefined;
+          return [
+            startup ? companyName(startup) : '',
+            startup?.representative_name ?? '',
+            startup?.phone_number ?? '',
+            SESSION_STATUS_LABELS[slot.session_status],
+          ].join(' ');
+        })
+        .join(' ');
+
+      return [row.tableCode, row.name, row.org ?? '', row.fields.join(' '), startupText]
+        .join(' ')
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [search, expertRows, byExpert, userById]);
+
   if (columns.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-neutral-base/60">
         아직 생성된 슬롯이 없습니다. 배치 단계에서 시간표 슬롯을 생성하면 진행 현황이 표시됩니다.
+      </p>
+    );
+  }
+
+  if (visibleExpertRows.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-neutral-base/60">
+        검색 조건에 맞는 진행 세션이 없습니다.
       </p>
     );
   }
@@ -212,12 +253,20 @@ export function TimeGridSheet({
             </tr>
           </thead>
           <tbody>
-            {expertRows.map((row, rowIdx) => {
+            {visibleExpertRows.map((row, rowIdx) => {
               const cells = byExpert.get(row.expertId);
-              const isLastRow = rowIdx === expertRows.length - 1;
+              const isLastRow = rowIdx === visibleExpertRows.length - 1;
+              const rowSearchMatched = includesSearch(
+                [row.tableCode, row.name, row.org ?? '', row.fields.join(' ')].join(' '),
+                search,
+              );
               return (
                 <tr key={row.expertId} className="border-b border-border last:border-b-0">
-                  <th className="sticky left-0 z-10 w-56 min-w-56 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle">
+                  <th
+                    className={`sticky left-0 z-10 w-56 min-w-56 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle ${
+                      rowSearchMatched ? 'ring-2 ring-inset ring-brand' : ''
+                    }`}
+                  >
                     <span className="flex items-center gap-1.5">
                       <TableTag code={row.tableCode} />
                       <span className="text-sm font-bold text-neutral-base">{row.name}</span>
@@ -265,6 +314,7 @@ export function TimeGridSheet({
                           onReplaceNoShow={onReplaceNoShow}
                           onOpenPhotos={onOpenPhotos}
                           onOpenDetail={onOpenDetail}
+                          search={search}
                         />
                       </td>
                     );
@@ -327,6 +377,7 @@ function GridCell({
   onReplaceNoShow,
   onOpenPhotos,
   onOpenDetail,
+  search,
 }: {
   slot: MatchingSlotRow | undefined;
   userById: Map<string, AssignableUser>;
@@ -342,6 +393,7 @@ function GridCell({
   onReplaceNoShow: (slot: MatchingSlotRow) => void;
   onOpenPhotos: (slot: MatchingSlotRow) => void;
   onOpenDetail: (slot: MatchingSlotRow) => void;
+  search: string;
 }) {
   // 사진 필터 켜짐: 사진과 무관한 칸(빈 칸/빈 슬롯)은 흐리게 처리해 미등록 셀을 부각한다.
   if (!slot) {
@@ -368,12 +420,21 @@ function GridCell({
   // 사진 필터(ideation §3): 미등록 셀은 ring 강조, 등록 완료 셀은 흐리게.
   const needsPhoto = photoFilter && photoCount === 0;
   const dimmed = photoFilter && photoCount > 0;
+  const searchMatched = includesSearch(
+    [
+      startup ? companyName(startup) : '',
+      startup?.representative_name ?? '',
+      startup?.phone_number ?? '',
+      SESSION_STATUS_LABELS[slot.session_status],
+    ].join(' '),
+    search,
+  );
 
   return (
     <div
       className={`flex flex-col gap-1 rounded-md px-1 py-1.5 transition-opacity ${SESSION_CELL_TINT[slot.session_status]} ${
         dimmed ? 'opacity-25' : ''
-      } ${needsPhoto ? 'ring-2 ring-[#000000]' : ''}`}
+      } ${searchMatched ? 'ring-2 ring-brand' : needsPhoto ? 'ring-2 ring-[#000000]' : ''}`}
     >
       <div className="flex justify-center">
         <Badge

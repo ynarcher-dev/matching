@@ -21,6 +21,7 @@ import {
   useToggleProposalLock,
 } from '@/hooks/useAiAllocation';
 import { summarizeProposals } from '@/lib/allocation';
+import { toast } from '@/stores/toastStore';
 import type { AssignableUser } from '@/types/eventDetail';
 import type { ConfirmResult } from '@/types/aiAllocation';
 
@@ -82,7 +83,14 @@ export function AiAllocationView() {
         confirming={confirm.isPending}
         onGenerate={() => {
           setReport(null);
-          generate.mutate();
+          generate.mutate(undefined, {
+            onSuccess: (data) =>
+              toast.success('AI 제안을 생성했습니다.', {
+                description: `제안 ${data.matched}건 · 미배치 ${data.unmatched}건 · 고정 보존 ${data.locked}건`,
+              }),
+            onError: (e) =>
+              toast.error('AI 제안을 생성하지 못했습니다.', { description: (e as Error).message }),
+          });
         }}
         onConfirm={() => setConfirmOpen(true)}
       />
@@ -98,17 +106,6 @@ export function AiAllocationView() {
         <Alert tone="error">일부 데이터를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
       )}
 
-      {generate.isError && <Alert tone="error">{(generate.error as Error).message}</Alert>}
-      {generate.isSuccess && !generate.isPending && (
-        <Alert tone="success">
-          제안 {generate.data.matched}건 생성 · 미배치 {generate.data.unmatched}건 · 고정 보존{' '}
-          {generate.data.locked}건 (빈 슬롯 {generate.data.empty_slots}개)
-        </Alert>
-      )}
-      {(lock.isError || move.isError) && (
-        <Alert tone="error">{((lock.error ?? move.error) as Error).message}</Alert>
-      )}
-
       {report && <ConfirmReport report={report} eventId={eventId} />}
 
       <AllocationSlotBoard
@@ -117,8 +114,24 @@ export function AiAllocationView() {
         userById={userById}
         timezone={event.timezone}
         busy={busy || !isAllocation}
-        onToggleLock={(id, next) => lock.mutate({ id, locked: next })}
-        onMove={(id, slotId) => move.mutate({ id, slotId })}
+        onToggleLock={(id, next) =>
+          lock.mutate(
+            { id, locked: next },
+            {
+              onError: (e) =>
+                toast.error('고정을 변경하지 못했습니다.', { description: (e as Error).message }),
+            },
+          )
+        }
+        onMove={(id, slotId) =>
+          move.mutate(
+            { id, slotId },
+            {
+              onError: (e) =>
+                toast.error('제안을 이동하지 못했습니다.', { description: (e as Error).message }),
+            },
+          )
+        }
       />
 
       <UnmatchedPanel proposals={proposals} userById={userById} />
@@ -130,13 +143,14 @@ export function AiAllocationView() {
         message="배정된 AI 제안을 실제 매칭 슬롯에 반영합니다. 충돌이 발생한 제안은 제외하고 정상 건만 부분 확정되며, 제외 사유는 리포트로 표시됩니다."
         confirmLabel="확정"
         loading={confirm.isPending}
-        error={confirm.isError ? (confirm.error as Error).message : null}
         onConfirm={() => {
           confirm.mutate(undefined, {
             onSuccess: (res) => {
               setReport(res);
               setConfirmOpen(false);
             },
+            onError: (e) =>
+              toast.error('AI 제안을 확정하지 못했습니다.', { description: (e as Error).message }),
           });
         }}
       />
@@ -166,7 +180,7 @@ function ConfirmReport({ report, eventId }: { report: ConfirmResult; eventId: st
         <ul className="flex flex-col divide-y divide-border rounded-xl border border-border text-sm">
           {report.conflicts.map((c) => (
             <li key={c.proposal_id} className="flex items-center justify-between gap-2 px-3 py-2">
-              <span className="font-mono text-xs text-neutral-base/60">
+              <span className="text-xs text-neutral-base/60">
                 슬롯 {c.slot_id.slice(0, 8)}
               </span>
               <span className="text-brand">{c.reason}</span>

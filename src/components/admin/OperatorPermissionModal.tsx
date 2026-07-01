@@ -8,6 +8,7 @@ import { ConfirmModal } from '@/components/common/ConfirmModal';
 import { useEventOperatorRoles } from '@/hooks/useOperators';
 import { useEvents } from '@/hooks/useEvents';
 import { useGrantEventOperator, useRevokeEventOperator } from '@/hooks/useOperatorMutations';
+import { toast } from '@/stores/toastStore';
 import { OPERATOR_PERMISSION_LABELS } from '@/lib/labels';
 import type { EventOperatorRole, Operator, OperatorPermission } from '@/types/operator';
 
@@ -72,6 +73,7 @@ export function OperatorPermissionModal({ open, onClose, operator }: OperatorPer
       setTouched(true);
       return;
     }
+    const isChange = Boolean(currentPermission);
     grant.mutate(
       { event_id: eventId, user_id: operator.id, permission, reason: reason.trim() },
       {
@@ -79,7 +81,12 @@ export function OperatorPermissionModal({ open, onClose, operator }: OperatorPer
           setEventId('');
           setReason('');
           setTouched(false);
+          toast.success(isChange ? '권한 등급을 변경했습니다.' : '권한을 부여했습니다.');
         },
+        onError: (e) =>
+          toast.error(isChange ? '권한 등급을 변경하지 못했습니다.' : '권한을 부여하지 못했습니다.', {
+            description: (e as Error).message,
+          }),
       },
     );
   };
@@ -134,7 +141,6 @@ export function OperatorPermissionModal({ open, onClose, operator }: OperatorPer
           {/* 권한 부여/변경 */}
           <section className="flex flex-col gap-3 rounded-lg border border-border p-4">
             <h3 className="text-sm font-semibold text-neutral-base">권한 부여 / 등급 변경</h3>
-            {grant.isError && <Alert tone="error">{(grant.error as Error).message}</Alert>}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <SelectField
                 label="행사"
@@ -193,7 +199,6 @@ export function OperatorPermissionModal({ open, onClose, operator }: OperatorPer
         reasonLabel="회수 사유"
         reasonPlaceholder="예: 담당 변경으로 권한 회수"
         loading={revoke.isPending}
-        error={revoke.error ? (revoke.error as Error).message : null}
         message={
           <>
             <span className="font-semibold">{operator.name}</span> 님의{' '}
@@ -205,7 +210,14 @@ export function OperatorPermissionModal({ open, onClose, operator }: OperatorPer
           if (!revokeTarget) return;
           revoke.mutate(
             { event_id: revokeTarget.event_id, user_id: operator.id, reason: r },
-            { onSuccess: () => setRevokeTarget(null) },
+            {
+              onSuccess: () => {
+                setRevokeTarget(null);
+                toast.success('권한을 회수했습니다.');
+              },
+              onError: (e) =>
+                toast.error('권한을 회수하지 못했습니다.', { description: (e as Error).message }),
+            },
           );
         }}
       />

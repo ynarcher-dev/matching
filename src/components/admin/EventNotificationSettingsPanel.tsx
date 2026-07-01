@@ -4,7 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
+import { StatusBanner } from '@/components/common/StatusBanner';
 import { Button } from '@/components/common/Button';
+import { toast } from '@/stores/toastStore';
 import {
   useEventNotificationSettings,
   useGlobalNotificationSettings,
@@ -106,7 +108,12 @@ export function EventNotificationSettingsPanel({ eventId }: Props) {
   }, 'BOOKING_CREATED');
 
   const onSubmit = async (values: EventNotificationSettingsInput) => {
-    await upsert.mutateAsync(values);
+    try {
+      await upsert.mutateAsync(values);
+      toast.success('행사 알림 정책을 저장했습니다.');
+    } catch (e) {
+      toast.error('저장하지 못했습니다.', { description: (e as Error).message });
+    }
   };
 
   return (
@@ -138,10 +145,11 @@ export function EventNotificationSettingsPanel({ eventId }: Props) {
         </div>
 
         {dispatchMode === 'FREE_OPERATION' && (
-          <Alert tone="info">
-            전역 발송이 비활성 상태입니다. 아래에서 행사별 정책을 설정해두면 전역 발송 활성화 시
-            즉시 적용됩니다.
-          </Alert>
+          <StatusBanner
+            tone="warning"
+            label="전역 발송 비활성"
+            detail="행사별 정책을 설정해 두면 전역 발송 활성화 시 즉시 적용됩니다."
+          />
         )}
       </Card>
 
@@ -151,12 +159,6 @@ export function EventNotificationSettingsPanel({ eventId }: Props) {
 
         {settingQ.isError && (
           <Alert tone="error">설정을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.</Alert>
-        )}
-        {upsert.isError && (
-          <Alert tone="error">{(upsert.error as Error).message ?? '저장에 실패했습니다.'}</Alert>
-        )}
-        {upsert.isSuccess && !isDirty && (
-          <Alert tone="info">저장되었습니다.</Alert>
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">

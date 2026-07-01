@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Card } from '@/components/common/Card';
 import { Alert } from '@/components/common/Alert';
 import { Button } from '@/components/common/Button';
+import { toast } from '@/stores/toastStore';
 import {
   useGlobalNotificationSettings,
   useUpdateGlobalNotificationSettings,
@@ -62,8 +63,13 @@ export function NotificationSettingsView() {
   const tabEnabled = watch('event_notification_tab_enabled');
 
   const onSubmit = async (values: GlobalNotificationSettingsInput) => {
-    await update.mutateAsync(values);
-    reset(values);
+    try {
+      await update.mutateAsync(values);
+      reset(values);
+      toast.success('알림 설정을 저장했습니다.');
+    } catch (e) {
+      toast.error('저장하지 못했습니다.', { description: (e as Error).message });
+    }
   };
 
   return (
@@ -106,10 +112,6 @@ export function NotificationSettingsView() {
         <h2 className="text-base font-bold text-neutral-base">발송 설정</h2>
 
         {settingQ.isError && <Alert tone="error">설정을 불러오지 못했습니다.</Alert>}
-        {update.isError && (
-          <Alert tone="error">{(update.error as Error).message ?? '저장에 실패했습니다.'}</Alert>
-        )}
-        {update.isSuccess && !isDirty && <Alert tone="info">저장되었습니다.</Alert>}
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
           {/* 행사알림 탭 노출 (임시 전역 스위치) — 발송 로직과 무관한 UI 게이트. */}
@@ -134,9 +136,9 @@ export function NotificationSettingsView() {
           {/* 실제 발송 활성화 */}
           <section className="flex flex-col gap-2">
             <p className="text-sm font-semibold text-neutral-base">실제 발송 활성화</p>
-            <Alert tone="error">
-              OFF 상태(기본값)에서는 외부 API를 호출하지 않습니다. ON으로 변경하면 행사별 정책에
-              따라 실제 알림이 발송되며 비용이 발생할 수 있습니다.
+            <Alert tone="warning">
+              실제 발송을 켜면 비용이 발생할 수 있습니다. 행사별 정책에 따라 외부 알림이
+              발송됩니다.
             </Alert>
             <label className="flex cursor-pointer items-center gap-2.5">
               <input
@@ -203,21 +205,14 @@ export function NotificationSettingsView() {
           기록됩니다. 실제 발송 활성화 전에 설정 유효성을 확인하는 용도입니다.
         </p>
 
-        {testSend.isError && (
-          <Alert tone="error">{testSend.error.message ?? '테스트 발송에 실패했습니다.'}</Alert>
-        )}
+        {/* 공급사 설정 불완전은 사용자가 환경변수를 고쳐야 하는 지속 상태라 Alert 로 유지. */}
         {testSend.data &&
-          (testSend.data.ok ? (
-            <Alert tone="info">
-              테스트 발송 성공{testSend.data.provider ? ` (${testSend.data.provider})` : ''}.
+          !testSend.data.ok &&
+          testSend.data.reason === 'PROVIDER_NOT_CONFIGURED' && (
+            <Alert tone="warning">
+              공급사 설정이 불완전합니다. API 키와 발신번호를 확인해 주세요.
             </Alert>
-          ) : (
-            <Alert tone="error">
-              {testSend.data.reason === 'PROVIDER_NOT_CONFIGURED'
-                ? '공급사 설정이 불완전합니다(API 키/발신번호 미설정). Edge Function 환경변수를 확인하세요.'
-                : '테스트 발송에 실패했습니다.'}
-            </Alert>
-          ))}
+          )}
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -236,7 +231,21 @@ export function NotificationSettingsView() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => testSend.mutate(testDest)}
+            onClick={() =>
+              testSend.mutate(testDest, {
+                onSuccess: (data) => {
+                  if (data.ok) {
+                    toast.success(
+                      `테스트 발송을 요청했습니다.${data.provider ? ` (${data.provider})` : ''}`,
+                    );
+                  } else if (data.reason !== 'PROVIDER_NOT_CONFIGURED') {
+                    toast.error('테스트 발송에 실패했습니다. 설정을 확인해 주세요.');
+                  }
+                  // PROVIDER_NOT_CONFIGURED 는 위 Alert 로 지속 표시.
+                },
+                onError: () => toast.error('테스트 발송에 실패했습니다. 설정을 확인해 주세요.'),
+              })
+            }
             disabled={testSend.isPending || testDest.trim().length < 9}
           >
             {testSend.isPending ? '발송 중…' : '테스트 발송'}

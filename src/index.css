@@ -58,6 +58,20 @@
   --text-3xl: 24px;
 
   --font-sans: 'Pretendard Variable', 'Pretendard', sans-serif;
+
+  /* 하단 토스트 등장 애니메이션(아래에서 살짝 올라오며 페이드 인). */
+  --animate-toast-in: toast-in 0.2s ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 :root {

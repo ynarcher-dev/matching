@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
 import { Alert } from '@/components/common/Alert';
+import { toast } from '@/stores/toastStore';
 import type { OperatorSecretResult } from '@/types/operator';
 
 interface OperatorSecretModalProps {
@@ -28,8 +29,10 @@ export function OperatorSecretModal({ open, onClose, result, email }: OperatorSe
     try {
       await navigator.clipboard.writeText(secret);
       setCopied(true);
+      toast.success(isLink ? '링크를 복사했습니다.' : '비밀번호를 복사했습니다.');
     } catch {
       setCopied(false);
+      toast.error('복사하지 못했습니다. 직접 선택해 복사해 주세요.');
     }
   };
 
@@ -42,10 +45,9 @@ export function OperatorSecretModal({ open, onClose, result, email }: OperatorSe
       footer={<Button onClick={onClose}>완료</Button>}
     >
       <div className="flex flex-col gap-3">
-        <Alert tone="success">
-          {isLink
-            ? '비밀번호 설정용 링크가 발급되었습니다.'
-            : '임시 비밀번호가 발급되었습니다.'}{' '}
+        <Alert tone="warning">
+          민감정보 · 1회만 표시됩니다.{' '}
+          {isLink ? '비밀번호 설정용 링크를 발급했습니다.' : '임시 비밀번호를 발급했습니다.'}{' '}
           이 화면을 닫으면 다시 볼 수 없으니 지금 전달하세요.
         </Alert>
         {email && (

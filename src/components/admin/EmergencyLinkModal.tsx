@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
 import { Alert } from '@/components/common/Alert';
+import { toast } from '@/stores/toastStore';
 import { useIssueEmergencyToken } from '@/hooks/useUserMutations';
 
 interface EmergencyLinkModalProps {
@@ -52,6 +53,8 @@ export function EmergencyLinkModal({ open, onClose, user }: EmergencyLinkModalPr
         onSuccess: (data) => {
           if (data?.token) setLink(buildLoginUrl(data.token));
         },
+        onError: (e) =>
+          toast.error('링크를 발급하지 못했습니다.', { description: (e as Error).message }),
       },
     );
   };
@@ -61,8 +64,10 @@ export function EmergencyLinkModal({ open, onClose, user }: EmergencyLinkModalPr
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
+      toast.success('링크를 복사했습니다.');
     } catch {
       setCopied(false);
+      toast.error('복사하지 못했습니다. 링크를 직접 선택해 복사해 주세요.');
     }
   };
 
@@ -95,7 +100,6 @@ export function EmergencyLinkModal({ open, onClose, user }: EmergencyLinkModalPr
 
         {!link ? (
           <>
-            {issue.isError && <Alert tone="error">{(issue.error as Error).message}</Alert>}
             <div className="flex flex-col gap-1.5">
               <label htmlFor="emergency-reason" className="text-sm font-semibold text-neutral-base">
                 발급 사유
@@ -118,9 +122,9 @@ export function EmergencyLinkModal({ open, onClose, user }: EmergencyLinkModalPr
           </>
         ) : (
           <>
-            <Alert tone="success">
-              링크가 발급되었습니다. 이 화면을 닫으면 다시 볼 수 없으니 지금 전달하세요(기본 30분 후
-              만료).
+            <Alert tone="warning">
+              민감정보 · 1회만 표시됩니다. 이 화면을 닫으면 링크를 다시 볼 수 없으니 지금
+              전달하세요(기본 30분 후 만료).
             </Alert>
             <div className="flex flex-col gap-2">
               <textarea

@@ -4,6 +4,7 @@ import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { FieldTags } from '@/components/common/FieldTags';
+import { SearchInput } from '@/components/common/FilterBar';
 import { TableTag } from '@/components/common/TableTag';
 import { buildBookingSchedule } from '@/lib/booking';
 import { formatDateTime } from '@/lib/datetime';
@@ -45,6 +46,11 @@ const TYPE_TONE: Record<BookingType, Tone> = {
   ADMIN_FORCE: 'warning',
 };
 
+function includesSearch(text: string, search: string): boolean {
+  const q = search.trim().toLowerCase();
+  return q.length > 0 && text.toLowerCase().includes(q);
+}
+
 /** 한 전문가 행의 표시 정보(테이블·이름·소속). */
 interface ExpertRow {
   expertId: string;
@@ -73,6 +79,7 @@ export function BookingScheduleTable({
   refreshing = false,
 }: BookingScheduleTableProps) {
   const { columns, byExpert } = useMemo(() => buildBookingSchedule(slots), [slots]);
+  const [search, setSearch] = useState('');
 
   // 크게보기: 이 카드만 화면 전체로 확대(풀스크린 오버레이). ESC 로 해제.
   const [enlarged, setEnlarged] = useState(false);
@@ -125,6 +132,31 @@ export function BookingScheduleTable({
     );
   }, [byExpert, userById, fieldNameById, defaultTableByExpert, tableCodeById]);
 
+  const visibleExpertRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return expertRows;
+
+    return expertRows.filter((row) => {
+      const cells = byExpert.get(row.expertId);
+      const startupText = [...(cells?.values() ?? [])]
+        .map((slot) => {
+          const startup = slot.startup_id ? userById.get(slot.startup_id) : undefined;
+          return [
+            startup ? companyName(startup) : '',
+            startup?.representative_name ?? '',
+            startup?.phone_number ?? '',
+            BOOKING_TYPE_LABELS[slot.booking_type],
+          ].join(' ');
+        })
+        .join(' ');
+
+      return [row.tableCode, row.name, row.org ?? '', row.fields.join(' '), startupText]
+        .join(' ')
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [search, expertRows, byExpert, userById]);
+
   return (
     <Card
       className={`flex flex-col gap-3 p-5 ${
@@ -145,6 +177,12 @@ export function BookingScheduleTable({
           </Badge>
           {headerActions}
         </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="전문가·기업·대표·테이블 검색"
+          widthClass="max-w-sm"
+        />
         <div className="ml-auto flex items-center gap-1.5">
           {onRefresh && (
             <Button
@@ -169,6 +207,10 @@ export function BookingScheduleTable({
       {columns.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-neutral-base/60">
           아직 생성된 슬롯이 없습니다. 배치 탭에서 시간표 슬롯을 생성하면 배치 현황이 표시됩니다.
+        </p>
+      ) : visibleExpertRows.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-neutral-base/60">
+          검색 조건에 맞는 예약 슬롯이 없습니다.
         </p>
       ) : (
         <div
@@ -207,11 +249,19 @@ export function BookingScheduleTable({
               </tr>
             </thead>
             <tbody>
-              {expertRows.map((row) => {
+              {visibleExpertRows.map((row) => {
                 const cells = byExpert.get(row.expertId);
+                const rowSearchMatched = includesSearch(
+                  [row.tableCode, row.name, row.org ?? '', row.fields.join(' ')].join(' '),
+                  search,
+                );
                 return (
                   <tr key={row.expertId} className="border-b border-border last:border-b-0">
-                    <th className="sticky left-0 z-10 w-56 min-w-56 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle">
+                    <th
+                      className={`sticky left-0 z-10 w-56 min-w-56 whitespace-nowrap border-r border-border bg-white px-3 py-2 text-left align-middle ${
+                        rowSearchMatched ? 'ring-2 ring-inset ring-brand' : ''
+                      }`}
+                    >
                       <span className="flex items-center gap-1.5">
                         <TableTag code={row.tableCode} />
                         <span className="text-sm font-bold text-neutral-base">{row.name}</span>
@@ -227,10 +277,23 @@ export function BookingScheduleTable({
                     {columns.map((c) => {
                       const slot = cells?.get(c);
                       const su = slot?.startup_id ? userById.get(slot.startup_id) : undefined;
+                      const cellSearchMatched = includesSearch(
+                        [
+                          su ? companyName(su) : '',
+                          su?.representative_name ?? '',
+                          su?.phone_number ?? '',
+                          slot ? BOOKING_TYPE_LABELS[slot.booking_type] : '',
+                        ].join(' '),
+                        search,
+                      );
                       return (
                         <td
                           key={c}
-                          className="w-[96px] min-w-[96px] border-r border-border p-1 align-middle last:border-r-0"
+                          className={`w-[96px] min-w-[96px] border-r border-border p-1 align-middle last:border-r-0 ${
+                            cellSearchMatched || (rowSearchMatched && slot)
+                              ? 'ring-2 ring-inset ring-brand'
+                              : ''
+                          }`}
                         >
                           <Cell
                             slot={slot}

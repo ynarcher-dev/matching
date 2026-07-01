@@ -5,7 +5,6 @@ import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
 import { TextField } from '@/components/common/TextField';
 import { SelectField } from '@/components/common/SelectField';
-import { Alert } from '@/components/common/Alert';
 import { FieldTagInput } from '@/components/admin/FieldTagInput';
 import { ParticipantFileInput } from '@/components/admin/ParticipantFileInput';
 import { ExpertAvatarField } from '@/components/admin/ExpertAvatarField';
@@ -13,6 +12,7 @@ import { ProposalHistoryTimeline } from '@/components/admin/ProposalHistoryTimel
 import { participantFormSchema } from '@/schemas/userSchemas';
 import type { ParticipantFormValues } from '@/schemas/userSchemas';
 import { useSaveParticipant } from '@/hooks/useUserMutations';
+import { toast } from '@/stores/toastStore';
 import { PARTICIPANT_ROLE_LABELS } from '@/lib/labels';
 import type { ParticipantRole } from '@/types/user';
 
@@ -121,7 +121,16 @@ export function UserDetailModal({ open, onClose, user, defaultRole }: UserDetail
         removeFile,
         currentFilePath,
       },
-      { onSuccess: () => onClose() },
+      {
+        onSuccess: () => {
+          onClose();
+          toast.success(isEdit ? '참가자 정보를 저장했습니다.' : '참가자를 등록했습니다.');
+        },
+        onError: (e) =>
+          toast.error(isEdit ? '참가자 정보를 저장하지 못했습니다.' : '참가자를 등록하지 못했습니다.', {
+            description: (e as Error).message,
+          }),
+      },
     );
   });
 
@@ -142,8 +151,6 @@ export function UserDetailModal({ open, onClose, user, defaultRole }: UserDetail
       }
     >
       <form id="user-form" onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
-        {save.error && <Alert tone="error">{(save.error as Error).message}</Alert>}
-
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <SelectField
             label="역할"

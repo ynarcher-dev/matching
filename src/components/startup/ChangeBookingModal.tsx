@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/common/Modal';
 import { Button } from '@/components/common/Button';
-import { Alert } from '@/components/common/Alert';
 import { formatDateTime, formatRange } from '@/lib/datetime';
 import { bookingBlockReason, isAvailable } from '@/lib/startupBooking';
 import type { MatchingSlotRow } from '@/types/eventDetail';
@@ -21,7 +20,6 @@ interface ChangeBookingModalProps {
   onClose: () => void;
   onConfirm: (toSlotId: string) => void;
   loading: boolean;
-  error: string | null;
 }
 
 /**
@@ -41,7 +39,6 @@ export function ChangeBookingModal({
   onClose,
   onConfirm,
   loading,
-  error,
 }: ChangeBookingModalProps) {
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -83,8 +80,6 @@ export function ChangeBookingModal({
       }
     >
       <div className="flex flex-col gap-3">
-        {error && <Alert tone="error">{error}</Alert>}
-
         {fromSlot && (
           <p className="text-sm text-neutral-base">
             현재 예약:{' '}
@@ -97,7 +92,7 @@ export function ChangeBookingModal({
 
         {candidates.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-neutral-base/60">
-            변경 가능한 빈 슬롯이 없습니다. 다른 기업이 슬롯을 취소하면 표시됩니다.
+            변경 가능한 시간이 없습니다. 다른 기업이 취소하면 표시됩니다.
           </p>
         ) : (
           <ul className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto">

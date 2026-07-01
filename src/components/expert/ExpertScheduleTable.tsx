@@ -46,7 +46,7 @@ export function ExpertScheduleTable({
       header: '시간',
       className: 'whitespace-nowrap',
       cell: (s) => (
-        <span className="font-mono text-sm font-semibold text-neutral-base">
+        <span className="text-sm font-semibold text-neutral-base">
           {hm(s.start_time)}
           <span className="text-neutral-base/40"> ~ {hm(s.end_time)}</span>
         </span>

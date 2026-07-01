@@ -91,6 +91,7 @@ export function ExpertCounselingWorkspace({
                 onStart={onStart}
                 startPending={startPending}
                 startError={startError}
+                onBack={onBack}
               />
             </div>
           }
@@ -108,6 +109,7 @@ function LogPane({
   onStart,
   startPending,
   startError,
+  onBack,
 }: {
   slot: MatchingSlotRow;
   eventId: string;
@@ -115,6 +117,7 @@ function LogPane({
   onStart: (slotId: string) => void;
   startPending: boolean;
   startError: string | null;
+  onBack: () => void;
 }) {
   if (slot.session_status === 'WAITING') {
     return (
@@ -145,8 +148,8 @@ function LogPane({
     );
   }
 
-  // IN_PROGRESS / COMPLETED → 일지 폼.
-  return <CounselingLogForm slot={slot} eventId={eventId} />;
+  // IN_PROGRESS / COMPLETED → 일지 폼. 수동 임시저장 성공 시 전체 일정으로 복귀.
+  return <CounselingLogForm slot={slot} eventId={eventId} onSaved={onBack} />;
 }
 
 /** 상단 뒤로가기 — 관리자 EventDetailHeader 의 '← 목록' 텍스트 링크와 동일 스타일. */
