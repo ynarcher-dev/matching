@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { sanitizeCell } from '@/lib/exportSafety';
 
 /**
  * 범용 xlsx 워크북 생성·다운로드 래퍼 (Phase 7 슬라이스 3).
@@ -32,7 +33,8 @@ export async function buildWorkbookBuffer(sheets: SheetSpec[]): Promise<ArrayBuf
     headerRow.font = { bold: true };
     headerRow.alignment = { vertical: 'middle' };
     for (const row of spec.rows) {
-      ws.addRow(row.map((v) => (v === null ? '' : v)));
+      // null → 빈칸, 문자열 셀은 수식 인젝션 방어(sanitizeCell)로 무력화.
+      ws.addRow(row.map((v) => (v === null ? '' : sanitizeCell(v))));
     }
     // 머리글 고정(스크롤 시 유지).
     ws.views = [{ state: 'frozen', ySplit: 1 }];

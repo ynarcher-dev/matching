@@ -45,16 +45,44 @@ interface DueNotification {
   notification_type: string;
 }
 
-/** 호출 인가: 시크릿이 설정돼 있으면 헤더가 일치해야 한다(미설정이면 통과 — service_role 베어러 전제). */
-function authorize(req: Request): boolean {
-  if (!DISPATCH_SECRET) return true;
-  return req.headers.get('x-dispatch-secret') === DISPATCH_SECRET;
+/** 호출자 식별용(로깅). 프록시 헤더 우선, 없으면 unknown. */
+function callerInfo(req: Request): { ip: string; ua: string } {
+  const ip =
+    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+    req.headers.get('x-real-ip') ||
+    'unknown';
+  const ua = req.headers.get('user-agent') ?? 'unknown';
+  return { ip, ua };
+}
+
+/**
+ * 호출 인가(fail-closed):
+ *  - 시크릿 미설정 → 503(설정 오류로 간주하고 거부. 무인증 통과 금지).
+ *  - 시크릿 설정·헤더 불일치 → 401.
+ *  - 일치 → 통과.
+ */
+function authorize(req: Request): { ok: true } | { ok: false; status: 503 | 401; reason: string } {
+  if (!DISPATCH_SECRET) return { ok: false, status: 503, reason: 'secret_not_configured' };
+  if (req.headers.get('x-dispatch-secret') !== DISPATCH_SECRET) {
+    return { ok: false, status: 401, reason: 'secret_mismatch' };
+  }
+  return { ok: true };
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
-  if (!authorize(req)) return json({ error: 'unauthorized' }, 401);
+
+  const caller = callerInfo(req);
+  const auth = authorize(req);
+  if (!auth.ok) {
+    console.warn(`[notification-dispatch] denied (${auth.reason}) ip=${caller.ip} ua="${caller.ua}"`);
+    const body =
+      auth.status === 503
+        ? { error: 'service_unavailable', detail: 'dispatch secret not configured' }
+        : { error: 'unauthorized' };
+    return json(body, auth.status);
+  }
 
   // 전역 설정 로드(공급사/발송 활성화).
   const { data: settings } = await admin
@@ -120,5 +148,8 @@ Deno.serve(async (req) => {
     }
   }
 
+  console.log(
+    `[notification-dispatch] ip=${caller.ip} provider=${provider} claimed=${due.length} sent=${sent} failed=${failed}`,
+  );
   return json({ ok: true, provider, claimed: due.length, sent, failed });
 });

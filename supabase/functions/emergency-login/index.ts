@@ -10,6 +10,8 @@
 //   4) { token, user } 반환. INVALID 는 401.
 //
 // 시크릿/주입: PARTICIPANT_JWT_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
+//   OTP_IP_SALT(선택) = 요청 IP 해시용 솔트 — 설정 시 IP 기반 rate limit(동일 IP
+//   10분 20회 실패 초과 → 429) 활성화. participant-login 과 동일 패턴/집계 테이블.
 // =============================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { SignJWT } from 'npm:jose@5';
@@ -28,6 +30,17 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+/** 요청 IP 를 비식별 해시로(원 IP 장기 저장 금지). 솔트 미설정 시 null. participant-login 과 동일. */
+async function hashIp(req: Request): Promise<string | null> {
+  const salt = Deno.env.get('OTP_IP_SALT');
+  if (!salt) return null;
+  const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim();
+  if (!ip) return null;
+  const data = new TextEncoder().encode(`${salt}:${ip}`);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
@@ -41,11 +54,18 @@ Deno.serve(async (req) => {
   }
   if (!token) return json({ error: 'bad_request' }, 400);
 
-  // 1) 토큰 소비(해시 일치·만료·1회 사용 원자 처리)
+  const ipHash = await hashIp(req);
+
+  // 1) 토큰 소비(rate limit·해시 일치·만료·1회 사용 원자 처리)
   const { data: result, error: rpcError } = await admin.rpc('consume_emergency_login_token', {
     p_token: token,
+    p_ip_hash: ipHash,
   });
   if (rpcError) return json({ error: 'server_error' }, 500);
+  if (result?.status === 'THROTTLED') {
+    // IP 기준 시도 과다 — 토큰 존재 정보가 아니므로 429 로 안내한다.
+    return json({ error: 'too_many_attempts', retry_after: result.retry_after ?? 600 }, 429);
+  }
   if (!result || result.status !== 'OK') {
     // 만료/사용·회수/불일치는 401(클라이언트가 안내 후 재발급 요청 경로 노출)
     return json({ error: 'invalid_token' }, 401);

@@ -4,6 +4,7 @@ import {
   buildCompanyStatuses,
   summarizePhotoStatus,
   filterCompanyStatuses,
+  stripJpegMetadata,
   PHOTO_MAX_BYTES,
 } from '@/lib/companyPhoto';
 import type { PhotoCompany } from '@/types/companyPhoto';
@@ -74,6 +75,64 @@ describe('companyPhoto.summarizePhotoStatus', () => {
       withoutPhotos: 3,
       totalPhotos: 0,
     });
+  });
+});
+
+describe('companyPhoto.stripJpegMetadata (EXIF strip — A-8)', () => {
+  const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0));
+  /** 마커 세그먼트(길이 필드 = payload + 2). */
+  const seg = (marker: number, payload: number[]) => {
+    const len = payload.length + 2;
+    return [0xff, marker, (len >> 8) & 0xff, len & 0xff, ...payload];
+  };
+
+  // SOI + APP1(Exif/GPS) + APP0(JFIF) + DQT + COM(주석) + SOS + 엔트로피 + EOI
+  const app1Exif = seg(0xe1, ascii('Exif\0\0GPS-secret-location'));
+  const app0Jfif = seg(0xe0, ascii('JFIF\0'));
+  const dqt = seg(0xdb, [0x00, 0x01, 0x02, 0x03]);
+  const com = seg(0xfe, ascii('device serial 12345'));
+  const sos = seg(0xda, [0x00, 0x0c]);
+  const jpeg = Uint8Array.from([
+    0xff, 0xd8, ...app1Exif, ...app0Jfif, ...dqt, ...com, ...sos, 0x11, 0x22, 0x33, 0xff, 0xd9,
+  ]);
+
+  it('APP1(Exif/GPS)·COM(주석) 세그먼트를 제거한다', () => {
+    const out = stripJpegMetadata(jpeg)!;
+    expect(out).not.toBeNull();
+    // 제거 대상 시그니처가 결과에서 사라짐
+    const hasSeq = (hay: Uint8Array, needle: number[]) => {
+      for (let i = 0; i + needle.length <= hay.length; i++) {
+        if (needle.every((b, j) => hay[i + j] === b)) return true;
+      }
+      return false;
+    };
+    expect(hasSeq(out, ascii('Exif'))).toBe(false);
+    expect(hasSeq(out, ascii('GPS-secret-location'))).toBe(false);
+    expect(hasSeq(out, ascii('device serial 12345'))).toBe(false);
+  });
+
+  it('JFIF(APP0)·양자화표(DQT)·엔트로피 데이터는 보존한다', () => {
+    const out = stripJpegMetadata(jpeg)!;
+    const hasSeq = (hay: Uint8Array, needle: number[]) => {
+      for (let i = 0; i + needle.length <= hay.length; i++) {
+        if (needle.every((b, j) => hay[i + j] === b)) return true;
+      }
+      return false;
+    };
+    expect(hasSeq(out, ascii('JFIF'))).toBe(true); // APP0 보존
+    expect(hasSeq(out, [0xff, 0xdb])).toBe(true); // DQT 마커 보존
+    expect(hasSeq(out, [0xff, 0xda, 0x00, 0x04, 0x00, 0x0c])).toBe(true); // SOS+페이로드
+    expect(hasSeq(out, [0x11, 0x22, 0x33])).toBe(true); // 엔트로피 데이터
+    expect(out[out.length - 2]).toBe(0xff); // EOI
+    expect(out[out.length - 1]).toBe(0xd9);
+    // SOI 유지
+    expect(out[0]).toBe(0xff);
+    expect(out[1]).toBe(0xd8);
+  });
+
+  it('JPEG(SOI) 이 아니면 null 반환 → 호출부가 원본 유지', () => {
+    expect(stripJpegMetadata(Uint8Array.from([0x89, 0x50, 0x4e, 0x47]))).toBeNull(); // PNG
+    expect(stripJpegMetadata(Uint8Array.from([0xff]))).toBeNull(); // 너무 짧음
   });
 });
 

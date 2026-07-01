@@ -4,6 +4,7 @@
  * 컴포넌트는 응답 행을 모아 이 헬퍼로 집계/CSV 문자열을 만든다(렌더·다운로드만 담당).
  */
 
+import { sanitizeCell } from '@/lib/exportSafety';
 import type { SurveyAnswerRow, SurveyQuestion } from '@/types/satisfaction';
 
 /** 평점형 집계: 응답 수·평균·1~5 분포(index 0=1점 … 4=5점). */
@@ -123,12 +124,17 @@ export function answerToDisplay(q: SurveyQuestion, answer: SurveyAnswerRow | und
   }
 }
 
-/** CSV 셀 이스케이프(쉼표·따옴표·줄바꿈 포함 시 따옴표로 감싸고 내부 따옴표 이중화). */
+/**
+ * CSV 셀 이스케이프.
+ * 1) 수식 인젝션 방어(sanitizeCell): 위험 접두 문자 시작 시 `'` prefix.
+ * 2) 쉼표·따옴표·줄바꿈 포함 시 따옴표로 감싸고 내부 따옴표 이중화.
+ */
 function escapeCsvCell(value: string): string {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
+  const safe = sanitizeCell(value);
+  if (/[",\n\r]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
   }
-  return value;
+  return safe;
 }
 
 /** 헤더 + 행렬을 CSV 문자열로(엑셀 한글 호환을 위해 호출부에서 BOM 부착). */

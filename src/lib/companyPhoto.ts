@@ -55,8 +55,69 @@ export function buildPhotoObjectKey(
 }
 
 /**
+ * JPEG 바이트에서 메타데이터 세그먼트(APP1 Exif/XMP ~ APP15, COM 주석)를 제거한다(순수 함수).
+ * GPS·기기 정보는 APP1 Exif 에 담기므로 카메라 사진의 위치 정보 누출을 차단한다.
+ * - SOI(0xFFD8) 로 시작하지 않으면(=JPEG 아님) `null` 반환 → 호출부가 원본 유지.
+ * - SOS(0xFFDA) 이후는 엔트로피 코딩 데이터라 그대로 복사한다.
+ * - JFIF APP0(0xFFE0) 는 디코딩 정상성을 위해 보존한다.
+ * - 구조가 예상과 다르면(파싱 실패) 안전하게 `null` 반환.
+ */
+export function stripJpegMetadata(bytes: Uint8Array): Uint8Array | null {
+  if (bytes.length < 2 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null; // SOI 아님
+  const out: number[] = [0xff, 0xd8];
+  let pos = 2;
+  const n = bytes.length;
+  while (pos + 1 < n) {
+    if (bytes[pos] !== 0xff) return null; // 마커 정렬 깨짐 → 안전하게 포기
+    const marker = bytes[pos + 1];
+    // SOS: 이후는 압축 이미지 데이터. 나머지를 그대로 복사하고 종료.
+    if (marker === 0xda) {
+      for (let i = pos; i < n; i++) out.push(bytes[i]);
+      return Uint8Array.from(out);
+    }
+    if (marker === 0xd9) {
+      // EOI
+      out.push(0xff, 0xd9);
+      return Uint8Array.from(out);
+    }
+    // 길이 필드가 없는 독립 마커(RST0~7, TEM, 채움 0xFF)는 헤더 영역엔 정상적으로 없다 → 방어적 포기.
+    if ((marker >= 0xd0 && marker <= 0xd7) || marker === 0x01 || marker === 0xff) return null;
+    if (pos + 3 >= n) return null;
+    const segLen = (bytes[pos + 2] << 8) | bytes[pos + 3]; // 길이 필드(자기 자신 2바이트 포함)
+    const segEnd = pos + 2 + segLen;
+    if (segLen < 2 || segEnd > n) return null;
+    // APP1~APP15(0xE1~0xEF)와 COM(0xFE)은 메타데이터 → 제거. 그 외(APP0/DQT/DHT/SOF…)는 보존.
+    const isMeta = (marker >= 0xe1 && marker <= 0xef) || marker === 0xfe;
+    if (!isMeta) {
+      for (let i = pos; i < segEnd; i++) out.push(bytes[i]);
+    }
+    pos = segEnd;
+  }
+  return Uint8Array.from(out);
+}
+
+/**
+ * 폴백 업로드 시 EXIF 누출을 막기 위한 최선 노력 스트립.
+ * JPEG 이면 메타데이터를 제거한 Blob 을, 아니거나 파싱 실패면 원본 파일을 반환한다.
+ * (canvas 재인코딩 성공 경로는 이미 EXIF 가 없으므로 이 함수는 폴백에서만 쓰인다.)
+ */
+export async function stripImageMetadata(file: File): Promise<Blob> {
+  const type = file.type.toLowerCase();
+  if (type !== 'image/jpeg' && type !== 'image/jpg') return file;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const cleaned = stripJpegMetadata(bytes);
+    if (!cleaned) return file;
+    return new Blob([cleaned as unknown as BlobPart], { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
+/**
  * 이미지를 캔버스로 리사이즈/재인코딩해 업로드 용량을 줄인다(JPEG).
- * 디코드 실패 등으로 변환이 어려우면 원본 파일을 그대로 반환한다(폴백).
+ * 캔버스 재인코딩 결과물에는 EXIF/GPS 가 남지 않는다(픽셀만 출력).
+ * 디코드 실패 등으로 변환이 어려우면 원본에서 EXIF 를 제거한 뒤 반환한다(폴백도 EXIF 없음).
  */
 export async function resizeImageFile(file: File): Promise<Blob> {
   try {
@@ -68,15 +129,15 @@ export async function resizeImageFile(file: File): Promise<Blob> {
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return file;
+    if (!ctx) return stripImageMetadata(file);
     ctx.drawImage(bitmap, 0, 0, w, h);
     bitmap.close?.();
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, 'image/jpeg', RESIZE_QUALITY),
     );
-    return blob ?? file;
+    return blob ?? (await stripImageMetadata(file));
   } catch {
-    return file;
+    return stripImageMetadata(file);
   }
 }
 
